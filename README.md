@@ -23,3 +23,11 @@ Install on a phone: open the site in Chrome and choose "Install app" / "Add to H
 Each release on the Releases page includes `homelogger.apk` (stable link: `https://github.com/Orangitaz/HomeLogger/releases/latest/download/homelogger.apk`). The app is standalone: its data is stored on the phone, no server needed. Use Settings → Save backup regularly (backups include your documents and photos). The app shows a dot on Settings when a newer release is available; install the new APK over the old one.
 
 The APK is built by `.github/workflows/android.yml` from `android/` plus the `public/` web app, using the fixed signing key in `android/homelogger.keystore` so updates install over earlier versions. Changes to `public/` ship in both the server image and the APK.
+
+### Sync with TrueNAS (optional)
+In the app: Settings → Sync with TrueNAS. Enter the server address (for example `http://192.168.1.50:30101`, the host port you gave the app in TrueNAS) and the password if you set `HOMELOGGER_PASSWORD`. The phone then syncs when the app opens and a few seconds after each change, whenever the server is reachable (home Wi-Fi, or a VPN such as Tailscale/WireGuard when away).
+
+- Both sides are merged: the newest edit to each item wins, and a delete wins over an older edit. Photos and documents sync in both directions.
+- Two devices that each created an area with the same name will end up with both; delete the extra one.
+- Restoring a backup on the phone does not erase server data; the two are merged on the next sync.
+- Sync needs the server on version 1.2.0 or newer. Use a version tag (`1.2.0`) for the TrueNAS image.

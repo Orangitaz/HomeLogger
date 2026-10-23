@@ -23,11 +23,21 @@ import android.widget.Toast;
 import androidx.core.content.FileProvider;
 import androidx.webkit.WebViewAssetLoader;
 
+import org.json.JSONObject;
+
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.FileOutputStream;
+import java.io.InputStream;
 import java.io.OutputStream;
+import java.io.RandomAccessFile;
+import java.net.HttpURLConnection;
+import java.net.URL;
 import java.nio.charset.StandardCharsets;
+import java.util.Iterator;
 import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * HomeLogger Android shell. The whole UI is the same web app the TrueNAS server serves
@@ -234,6 +244,160 @@ public class MainActivity extends Activity {
             } catch (Exception e) {
                 toast("Could not open file");
             }
+        }
+
+        // ---- Native HTTP, used by "Sync with TrueNAS". Doing the request here (not with fetch in the page)
+        // avoids web-security rules that block an https page from reaching a server on the home network. ----
+        private final Map<String, HttpJob> jobs = new ConcurrentHashMap<>();
+
+        private class HttpJob {
+            String method, url;
+            JSONObject headers = new JSONObject();
+            File body, resp;
+            OutputStream bodyOut;
+        }
+
+        private File httpDir() {
+            File dir = new File(getCacheDir(), "http");
+            //noinspection ResultOfMethodCallIgnored
+            dir.mkdirs();
+            return dir;
+        }
+
+        @JavascriptInterface
+        public void httpBegin(String id, String method, String url, String headersJson) {
+            HttpJob j = new HttpJob();
+            j.method = method;
+            j.url = url;
+            try {
+                j.headers = new JSONObject(headersJson);
+            } catch (Exception ignored) {
+            }
+            try {
+                j.body = new File(httpDir(), "req_" + safeName(id));
+                j.bodyOut = new FileOutputStream(j.body);
+            } catch (Exception e) {
+                j.bodyOut = null;
+            }
+            jobs.put(id, j);
+        }
+
+        @JavascriptInterface
+        public void httpBody(String id, String b64) {
+            HttpJob j = jobs.get(id);
+            if (j == null || j.bodyOut == null) return;
+            try {
+                j.bodyOut.write(Base64.decode(b64, Base64.DEFAULT));
+            } catch (Exception ignored) {
+            }
+        }
+
+        @JavascriptInterface
+        public void httpSend(final String id) {
+            final HttpJob j = jobs.get(id);
+            if (j == null) return;
+            new Thread(new Runnable() {
+                @Override
+                public void run() {
+                    runHttp(id, j);
+                }
+            }).start();
+        }
+
+        private void runHttp(String id, HttpJob j) {
+            int status = 0;
+            String headers = "{}";
+            String err = "";
+            HttpURLConnection c = null;
+            try {
+                if (j.bodyOut != null) j.bodyOut.close();
+                c = (HttpURLConnection) new URL(j.url).openConnection();
+                c.setConnectTimeout(10000);
+                c.setReadTimeout(120000);
+                c.setInstanceFollowRedirects(false);
+                c.setRequestMethod(j.method);
+                Iterator<String> keys = j.headers.keys();
+                while (keys.hasNext()) {
+                    String k = keys.next();
+                    c.setRequestProperty(k, j.headers.getString(k));
+                }
+                long blen = j.body != null ? j.body.length() : 0;
+                if (blen > 0 || "POST".equals(j.method) || "PUT".equals(j.method)) {
+                    c.setDoOutput(true);
+                    c.setFixedLengthStreamingMode(blen);
+                    OutputStream os = c.getOutputStream();
+                    if (blen > 0) {
+                        FileInputStream in = new FileInputStream(j.body);
+                        byte[] buf = new byte[65536];
+                        int n;
+                        while ((n = in.read(buf)) > 0) os.write(buf, 0, n);
+                        in.close();
+                    }
+                    os.close();
+                }
+                status = c.getResponseCode();
+                InputStream is = status >= 400 ? c.getErrorStream() : c.getInputStream();
+                j.resp = new File(httpDir(), "resp_" + safeName(id));
+                FileOutputStream fo = new FileOutputStream(j.resp);
+                if (is != null) {
+                    byte[] buf = new byte[65536];
+                    int n;
+                    while ((n = is.read(buf)) > 0) fo.write(buf, 0, n);
+                    is.close();
+                }
+                fo.close();
+                JSONObject h = new JSONObject();
+                h.put("content-type", c.getContentType() == null ? "" : c.getContentType());
+                headers = h.toString();
+            } catch (Exception e) {
+                status = 0;
+                err = e.getClass().getSimpleName() + ": " + e.getMessage();
+            } finally {
+                if (c != null) c.disconnect();
+            }
+            final String js = "window.__httpDone(" + JSONObject.quote(id) + "," + status + "," + JSONObject.quote(headers) + "," + JSONObject.quote(err) + ")";
+            runOnUiThread(new Runnable() {
+                @Override
+                public void run() {
+                    web.evaluateJavascript(js, null);
+                }
+            });
+        }
+
+        @JavascriptInterface
+        public int httpSize(String id) {
+            HttpJob j = jobs.get(id);
+            return (j == null || j.resp == null) ? 0 : (int) j.resp.length();
+        }
+
+        @JavascriptInterface
+        public String httpRead(String id, int offset, int len) {
+            HttpJob j = jobs.get(id);
+            if (j == null || j.resp == null) return "";
+            try {
+                RandomAccessFile f = new RandomAccessFile(j.resp, "r");
+                byte[] buf = new byte[(int) Math.min((long) len, Math.max(0L, f.length() - offset))];
+                f.seek(offset);
+                f.readFully(buf);
+                f.close();
+                return Base64.encodeToString(buf, Base64.NO_WRAP);
+            } catch (Exception e) {
+                return "";
+            }
+        }
+
+        @JavascriptInterface
+        public void httpClose(String id) {
+            HttpJob j = jobs.remove(id);
+            if (j == null) return;
+            try {
+                if (j.bodyOut != null) j.bodyOut.close();
+            } catch (Exception ignored) {
+            }
+            if (j.body != null) //noinspection ResultOfMethodCallIgnored
+                j.body.delete();
+            if (j.resp != null) //noinspection ResultOfMethodCallIgnored
+                j.resp.delete();
         }
 
         private void write(byte[] bytes) {

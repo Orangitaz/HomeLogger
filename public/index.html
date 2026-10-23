@@ -130,7 +130,7 @@ const idb = (() => {
     keys: s => run(s, 'readonly', o => o.getAllKeys()),
   };
 })();
-const lsave = () => idb.put('kv', 'db', LDB);
+const lsave = async quiet => { await idb.put('kv', 'db', LDB); if (!quiet) { if (syncing) dirtyDuringSync = true; scheduleSync(); } };
 const rid = () => Array.from(crypto.getRandomValues(new Uint8Array(6)), b => b.toString(16).padStart(2, '0')).join('');
 const LKEYS = {
   areas: ['name', 'icon', 'color', 'notes', 'coverId', 'details', 'order'],
@@ -138,7 +138,8 @@ const LKEYS = {
   records: ['areaId', 'type', 'date', 'title', 'vendor', 'notes', 'parts'],
   documents: ['areaId', 'recordId', 'category', 'title', 'notes', 'expires', 'fileId', 'fileName', 'mime', 'size'],
 };
-const EMPTY_DB = () => ({ areas: [], tasks: [], records: [], documents: [], settings: { webhook: '' } });
+const EMPTY_DB = () => ({ areas: [], tasks: [], records: [], documents: [], deleted: [], settings: { webhook: '' } });
+const COLS = ['areas', 'tasks', 'records', 'documents'];
 function addMonths(dateStr, m) {
   const d = new Date(dateStr + 'T12:00:00'); const day = d.getDate();
   d.setMonth(d.getMonth() + m); if (d.getDate() !== day) d.setDate(0);
@@ -146,6 +147,7 @@ function addMonths(dateStr, m) {
 }
 async function localInit() {
   LDB = (await idb.get('kv', 'db')) || EMPTY_DB();
+  if (!Array.isArray(LDB.deleted)) LDB.deleted = [];
   try { if (navigator.storage && navigator.storage.persist) navigator.storage.persist(); } catch (e) {}
   try { APP_VERSION = (await (await fetch('version.json')).json()).version || APP_VERSION; } catch (e) {}
 }
@@ -159,13 +161,13 @@ async function localApi(method, url, body, raw) {
   if (a === 'files' && method === 'POST') { const fid = rid() + rid(); await idb.put('files', fid, raw); return { fileId: fid, size: raw.size }; }
   if (LKEYS[a]) {
     const list = LDB[a];
-    if (method === 'POST' && !b) { const item = Object.assign({ id: rid(), createdAt: now() }, pick(body, LKEYS[a])); list.push(item); await lsave(); return item; }
+    if (method === 'POST' && !b) { const created = now(); const item = Object.assign({ id: rid(), createdAt: created, updatedAt: created }, pick(body, LKEYS[a])); list.push(item); await lsave(); return item; }
     const item = list.find(x => x.id === b);
     if (!item) throw new Error('not found');
     if (a === 'tasks' && c === 'done' && method === 'POST') {
       const date = (body && body.date) || today();
-      item.lastDone = date; item.nextDue = item.intervalMonths ? addMonths(date, parseInt(item.intervalMonths, 10)) : '';
-      const rec = { id: rid(), createdAt: now(), areaId: item.areaId, type: 'maintenance', date, title: item.title, vendor: (body && body.vendor) || '', notes: (body && body.notes) || '', parts: '' };
+      item.lastDone = date; item.nextDue = item.intervalMonths ? addMonths(date, parseInt(item.intervalMonths, 10)) : ''; item.updatedAt = now();
+      const rec = { id: rid(), createdAt: item.updatedAt, updatedAt: item.updatedAt, areaId: item.areaId, type: 'maintenance', date, title: item.title, vendor: (body && body.vendor) || '', notes: (body && body.notes) || '', parts: '' };
       LDB.records.push(rec); await lsave(); return { task: item, record: rec };
     }
     if (method === 'PUT') {
@@ -174,22 +176,138 @@ async function localApi(method, url, body, raw) {
     }
     if (method === 'DELETE') {
       list.splice(list.indexOf(item), 1);
+      const bury = (col, x) => { LDB.deleted = LDB.deleted.filter(t => !(t.col === col && t.id === x.id)); LDB.deleted.push({ col, id: x.id, at: now() }); };
+      bury(a, item);
       let gone = [];
       if (a === 'areas') {
-        LDB.tasks = LDB.tasks.filter(t => t.areaId !== item.id);
+        LDB.tasks = LDB.tasks.filter(t => { if (t.areaId === item.id) bury('tasks', t); return t.areaId !== item.id; });
         const rec = LDB.records.filter(r => r.areaId === item.id).map(r => r.id);
-        LDB.records = LDB.records.filter(r => r.areaId !== item.id);
+        LDB.records = LDB.records.filter(r => { if (r.areaId === item.id) bury('records', r); return r.areaId !== item.id; });
         gone = LDB.documents.filter(d => d.areaId === item.id || rec.includes(d.recordId));
         if (item.coverId) await idb.del('files', item.coverId);
       } else if (a === 'records') gone = LDB.documents.filter(d => d.recordId === item.id);
       else if (a === 'documents') gone = [item];
       if (a !== 'documents') LDB.documents = LDB.documents.filter(d => !gone.includes(d));
-      for (const d of gone) if (d.fileId) await idb.del('files', d.fileId);
+      for (const d of gone) { if (a !== 'documents') bury('documents', d); if (d.fileId) await idb.del('files', d.fileId); }
       await lsave(); return { ok: true };
     }
   }
   throw new Error('not found');
 }
+
+// ---------- Sync with the TrueNAS server (Android app only) ----------
+// Push what changed here, pull what changed there. Newest edit wins per item; a delete wins over an older edit.
+let syncing = false, syncTimer = null, dirtyDuringSync = false;
+const syncCfg = () => { try { return JSON.parse(localStorage.getItem('hl-sync')) || null; } catch (e) { return null; } };
+const setSyncCfg = c => { try { if (c) localStorage.setItem('hl-sync', JSON.stringify(c)); else localStorage.removeItem('hl-sync'); } catch (e) {} };
+const tsOf = x => x.updatedAt || x.createdAt || '';
+function scheduleSync(ms) { if (!LOCAL || !syncCfg()) return; clearTimeout(syncTimer); syncTimer = setTimeout(syncNow, ms == null ? 4000 : ms); }
+// Request done by the Android app itself (see MainActivity.Bridge.http*), returned as a normal Response.
+const nativeWaiters = {};
+window.__httpDone = (id, status, headers, err) => { const w = nativeWaiters[id]; if (w) { delete nativeWaiters[id]; w({ status, headers, err }); } };
+async function nativeFetch(url, o) {
+  const id = rid() + rid();
+  AndroidBridge.httpBegin(id, String(o.method || 'GET').toUpperCase(), url, JSON.stringify(o.headers || {}));
+  try {
+    if (o.body) await eachB64(o.body instanceof Blob ? o.body : new Blob([o.body]), c => AndroidBridge.httpBody(id, c));
+    const done = new Promise(res => { nativeWaiters[id] = res; });
+    AndroidBridge.httpSend(id);
+    const { status, headers, err } = await done;
+    if (!status) throw new Error(err || 'network error');
+    const size = AndroidBridge.httpSize(id), parts = [];
+    for (let off = 0; off < size; off += CHUNK) { const b64 = AndroidBridge.httpRead(id, off, CHUNK); const bin = atob(b64), u = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i); parts.push(u); }
+    let type = ''; try { type = JSON.parse(headers)['content-type'] || ''; } catch (e) {}
+    return new Response(new Blob(parts, { type }), { status });
+  } finally { AndroidBridge.httpClose(id); }
+}
+async function sfetch(path, opt) {
+  const c = syncCfg(); const o = Object.assign({}, opt); o.headers = Object.assign({}, o.headers);
+  if (c.password) o.headers.Authorization = 'Basic ' + btoa('homelogger:' + c.password);
+  let r;
+  try { r = await (typeof AndroidBridge.httpBegin === 'function' ? nativeFetch : fetch)(c.url + path, o); } catch (e) { throw new Error("Can't reach the server. Check the address, and that you're on your home network or VPN."); }
+  if (r.status === 401) throw new Error('Wrong password');
+  if (!r.ok) throw new Error('Server error ' + r.status);
+  return r;
+}
+function syncText() {
+  const c = syncCfg();
+  if (!c) return 'Sync is off.';
+  if (syncing) return 'Syncing…';
+  if (c.error) return 'Last sync failed: ' + c.error;
+  return c.last ? 'Last synced ' + new Date(c.last).toLocaleString() : 'Not synced yet.';
+}
+const paintSync = msg => { const el = document.querySelector('#syncStatus'); if (el) el.textContent = msg || syncText(); };
+const fileRefs = db => { const r = new Set(); db.documents.forEach(d => d.fileId && r.add(d.fileId)); db.areas.forEach(a => a.coverId && r.add(a.coverId)); return r; };
+
+// Merge the server's answer into the local data. Returns true if anything changed.
+function applyPull(res, gone) {
+  let changed = false;
+  const dropFile = (col, x) => { const f = col === 'documents' ? x.fileId : col === 'areas' ? x.coverId : ''; if (f) gone.add(f); };
+  for (const t of res.deleted || []) {
+    if (!LDB[t.col]) continue;
+    const i = LDB[t.col].findIndex(x => x.id === t.id);
+    if (i >= 0) {
+      if (tsOf(LDB[t.col][i]) > t.at) continue; // edited here after it was deleted elsewhere: keep it
+      dropFile(t.col, LDB[t.col].splice(i, 1)[0]); changed = true;
+    }
+    if (!LDB.deleted.some(x => x.col === t.col && x.id === t.id)) LDB.deleted.push({ col: t.col, id: t.id, at: t.at });
+  }
+  for (const col of COLS) for (const x of (res.items && res.items[col]) || []) {
+    const tomb = LDB.deleted.find(t => t.col === col && t.id === x.id);
+    if (tomb && tomb.at >= tsOf(x)) continue;
+    const i = LDB[col].findIndex(y => y.id === x.id);
+    if (i < 0) { LDB[col].push(x); changed = true; }
+    else if (tsOf(x) > tsOf(LDB[col][i])) {
+      const old = LDB[col][i];
+      if (col === 'areas' && old.coverId && old.coverId !== x.coverId) gone.add(old.coverId);
+      LDB[col][i] = x; changed = true;
+    }
+  }
+  // Drop anything whose area or work entry no longer exists.
+  const areaIds = new Set(LDB.areas.map(a => a.id));
+  for (const col of ['tasks', 'records']) LDB[col] = LDB[col].filter(x => { const ok = !x.areaId || areaIds.has(x.areaId); if (!ok) changed = true; return ok; });
+  const recIds = new Set(LDB.records.map(r => r.id));
+  LDB.documents = LDB.documents.filter(d => { const ok = (!d.areaId || areaIds.has(d.areaId)) && (!d.recordId || recIds.has(d.recordId)); if (!ok) { dropFile('documents', d); changed = true; } return ok; });
+  const cutoff = new Date(Date.now() - 365 * 864e5).toISOString();
+  LDB.deleted = LDB.deleted.filter(t => t.at > cutoff);
+  return changed;
+}
+
+async function syncNow() {
+  const c = syncCfg();
+  if (!LOCAL || !c || syncing) return;
+  syncing = true; dirtyDuringSync = false; paintSync('Syncing…');
+  const started = new Date().toISOString();
+  let changed = false;
+  try {
+    const last = c.lastPush || '';
+    const items = {}; COLS.forEach(col => { items[col] = LDB[col].filter(x => !last || tsOf(x) >= last); });
+    const deleted = LDB.deleted.filter(t => !last || t.at >= last);
+    const res = await (await sfetch('/api/sync', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ since: c.since || 0, items, deleted }) })).json();
+    for (const fid of res.needFiles || []) { const bl = await fileBlob(fid); if (bl) await sfetch('/api/files?id=' + fid, { method: 'POST', body: bl }); }
+    const gone = new Set();
+    changed = applyPull(res, gone);
+    const have = new Set(await idb.keys('files')), refs = fileRefs(LDB);
+    for (const fid of refs) if (!have.has(fid)) {
+      try { await idb.put('files', fid, await (await sfetch('/api/files/' + fid)).blob()); changed = true; } catch (e) { if (/password|reach/i.test(e.message)) throw e; }
+    }
+    for (const fid of gone) if (!refs.has(fid)) await idb.del('files', fid);
+    await lsave(true);
+    setSyncCfg(Object.assign(syncCfg() || c, { since: res.now, lastPush: started, last: new Date().toISOString(), error: '' }));
+  } catch (e) {
+    const cur = syncCfg(); if (cur) setSyncCfg(Object.assign(cur, { error: e.message }));
+  } finally {
+    syncing = false;
+    if (dirtyDuringSync) scheduleSync(1500);
+    paintSync();
+    if (syncCfg()) {
+      await load();
+      if (changed && !document.querySelector('.sheet-bg') && view.name !== 'settings') render();
+    }
+  }
+}
+document.addEventListener('visibilitychange', () => { if (!document.hidden) scheduleSync(500); });
+setInterval(() => { if (!document.hidden) scheduleSync(0); }, 300000);
 
 // Files in local mode are blobs; <img src="/api/files/ID"> placeholders get swapped for blob: URLs.
 const blobUrls = {};
@@ -240,11 +358,13 @@ async function localRestore(file) {
   for (const fid of await idb.keys('files')) await idb.del('files', fid);
   Object.keys(blobUrls).forEach(k => delete blobUrls[k]);
   LDB = Object.assign(EMPTY_DB(), db);
+  if (!Array.isArray(LDB.deleted)) LDB.deleted = [];
   for (const [fid, f] of Object.entries(parsed.files || {})) {
     const bin = atob(f.b64), u = new Uint8Array(bin.length);
     for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i);
     await idb.put('files', fid, new Blob([u], { type: f.mime || '' }));
   }
+  const c = syncCfg(); if (c) setSyncCfg(Object.assign(c, { since: 0, lastPush: '' }));
   await lsave();
 }
 let UPDATE = null;
@@ -567,9 +687,14 @@ function renderSettings() {
       <div class="actions"><button class="btn" id="dlBackup">Save backup</button><button class="btn sec" id="restore">Restore…</button></div><input type="file" id="restoreFile" accept=".json,application/json" style="display:none"></div>`
     : `<h2>Backup</h2><div class="card"><p class="small" style="margin-top:0">Downloads your data (areas, tasks, history, document list). Uploaded files live in the data folder and are included in your TrueNAS dataset snapshots. The server also keeps 14 daily backups automatically.</p>
       <div class="actions"><a class="btn" href="/api/backup" download>Download backup</a><button class="btn sec" id="restore">Restore…</button></div><input type="file" id="restoreFile" accept=".json" style="display:none"></div>`;
+  const sync = !LOCAL ? '' : `<h2>Sync with TrueNAS</h2><div class="card"><p class="small" style="margin-top:0">Keep this phone and your HomeLogger server in step. Changes on either side are merged (the newest edit wins). It syncs when you open the app and a few seconds after each change, whenever the server is reachable on your home network or over VPN.</p>
+    <label>Server address</label><input id="syUrl" placeholder="http://192.168.1.50:30101" value="${esc((syncCfg() || {}).url || '')}" autocapitalize="off" autocorrect="off">
+    <label>Password (only if you set one on the server)</label><input id="syPw" type="password" value="${esc((syncCfg() || {}).password || '')}">
+    <div class="actions"><button class="btn" id="syGo">${syncCfg() ? 'Save & sync now' : 'Connect & sync'}</button>${syncCfg() ? '<button class="btn sec" id="syOff">Turn off</button>' : ''}</div>
+    <p class="small" id="syncStatus" style="margin-bottom:0">${esc(syncText())}</p></div>`;
   const alerts = LOCAL ? '' : `<h2>Alerts</h2><div class="card"><p class="small" style="margin-top:0">Optional webhook (Home Assistant, ntfy, etc.). Receives a daily POST when tasks are due or documents expire within 30 days.</p>
     <input id="hook" placeholder="https://…" value="${esc(S.settings.webhook || '')}"><div class="actions"><button class="btn" id="saveHook">Save</button></div></div>`;
-  return upd + backup + alerts + `<h2>Appearance</h2><div class="card"><select id="theme"><option value="dark">Dark</option><option value="light">Light</option></select></div>
+  return upd + sync + backup + alerts + `<h2>Appearance</h2><div class="card"><select id="theme"><option value="dark">Dark</option><option value="light">Light</option></select></div>
     <h2>About</h2><div class="small" id="ver">HomeLogger ${LOCAL ? esc(APP_VERSION) : ''}</div>`;
 }
 
@@ -592,6 +717,14 @@ function mountSettings() {
   const th = $('#theme'); th.value = localStorage.getItem('hl-theme') || 'dark';
   th.onchange = () => { localStorage.setItem('hl-theme', th.value); applyTheme(); };
   const hb = $('#saveHook'); if (hb) hb.onclick = async () => { await api('PUT', '/api/settings', { webhook: $('#hook').value.trim() }); await load(); toast('Saved'); };
+  const sg = $('#syGo'); if (sg) sg.onclick = async () => {
+    let url = $('#syUrl').value.trim(); if (!url) return toast('Enter the server address');
+    if (!/^https?:\/\//i.test(url)) url = 'http://' + url;
+    setSyncCfg({ url: url.replace(/\/+$/, ''), password: $('#syPw').value, since: 0, lastPush: '' });
+    clearTimeout(syncTimer); await syncNow();
+    const cc = syncCfg(); toast(cc && cc.error ? cc.error : 'Synced'); render();
+  };
+  const so = $('#syOff'); if (so) so.onclick = () => { setSyncCfg(null); clearTimeout(syncTimer); toast('Sync turned off'); render(); };
   const db = $('#dlBackup'); if (db) db.onclick = async () => { try { await localBackup(); } catch (err) { alert('Backup failed: ' + err.message); } };
   $('#restore').onclick = () => $('#restoreFile').click();
   $('#restoreFile').onchange = async e => {
@@ -667,7 +800,7 @@ function docView(d) {
 }
 
 applyTheme();
-(LOCAL ? localInit() : Promise.resolve()).then(load).then(render).then(checkUpdate).catch(e => { $('#app').innerHTML = '<div class="empty">Could not load data: ' + esc(e.message) + '</div>'; });
+(LOCAL ? localInit() : Promise.resolve()).then(load).then(render).then(() => scheduleSync(800)).then(checkUpdate).catch(e => { $('#app').innerHTML = '<div class="empty">Could not load data: ' + esc(e.message) + '</div>'; });
 </script>
 </body>
 </html>
