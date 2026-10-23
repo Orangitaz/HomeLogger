@@ -1,0 +1,502 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#0b0f17">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="icon" href="/icon.svg">
+<title>HomeLogger</title>
+<style>
+:root{--bg:#0b0f17;--card:#141a26;--card2:#1b2333;--line:#263047;--tx:#e8edf7;--mut:#8b97b1;--acc:#2ee6a6;--acc2:#4aa8ff;--warn:#ffb84a;--bad:#ff5d6c;--r:16px}
+:root[data-theme=light]{--bg:#f3f5f9;--card:#fff;--card2:#eef1f7;--line:#dbe0ec;--tx:#141a26;--mut:#5d6985}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+body{margin:0;background:var(--bg);color:var(--tx);font:16px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;padding-bottom:84px}
+header{position:sticky;top:0;z-index:5;background:color-mix(in srgb,var(--bg) 88%,transparent);backdrop-filter:blur(10px);display:flex;align-items:center;gap:10px;padding:14px 16px;border-bottom:1px solid var(--line)}
+header h1{font-size:20px;margin:0;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ib{background:var(--card);border:1px solid var(--line);color:var(--tx);width:40px;height:40px;border-radius:12px;font-size:18px;cursor:pointer;display:grid;place-items:center}
+main{max-width:900px;margin:0 auto;padding:16px}
+nav.bot{position:fixed;bottom:0;left:0;right:0;display:flex;background:var(--card);border-top:1px solid var(--line);padding:6px 6px calc(6px + env(safe-area-inset-bottom));z-index:5}
+nav.bot button{flex:1;background:none;border:0;color:var(--mut);padding:6px;font-size:11px;cursor:pointer}
+nav.bot button span{display:block;font-size:22px}
+nav.bot button.on{color:var(--acc)}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:12px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:14px}
+.area{cursor:pointer;position:relative;overflow:hidden;min-height:130px;display:flex;flex-direction:column;justify-content:flex-end;gap:4px}
+.area .ic{font-size:34px;margin-bottom:auto}
+.area .nm{font-weight:650}
+.area .st{font-size:13px;color:var(--mut)}
+.area .bar{position:absolute;left:0;top:0;bottom:0;width:4px}
+.area .cover{position:absolute;inset:0;background-size:cover;background-position:center;opacity:.28}
+.area>*{position:relative}
+.pill{display:inline-block;font-size:12px;padding:2px 8px;border-radius:99px;background:var(--card2);color:var(--mut)}
+.pill.bad{background:color-mix(in srgb,var(--bad) 22%,transparent);color:var(--bad)}
+.pill.warn{background:color-mix(in srgb,var(--warn) 22%,transparent);color:var(--warn)}
+.pill.ok{background:color-mix(in srgb,var(--acc) 20%,transparent);color:var(--acc)}
+h2{font-size:15px;color:var(--mut);text-transform:uppercase;letter-spacing:.06em;margin:22px 0 10px;font-weight:600}
+.row{display:flex;align-items:center;gap:10px;padding:12px 14px;background:var(--card);border:1px solid var(--line);border-radius:14px;margin-bottom:8px}
+.row .grow{flex:1;min-width:0}
+.row .t{font-weight:600;overflow:hidden;text-overflow:ellipsis}
+.row .s{font-size:13px;color:var(--mut)}
+.tabs{display:flex;gap:6px;overflow-x:auto;margin:0 -16px 14px;padding:0 16px;scrollbar-width:none}
+.tabs button{background:var(--card);border:1px solid var(--line);color:var(--mut);border-radius:99px;padding:8px 14px;white-space:nowrap;cursor:pointer;font-size:14px}
+.tabs button.on{background:var(--acc);color:#04130d;border-color:var(--acc);font-weight:650}
+.btn{background:var(--acc);color:#04130d;border:0;border-radius:12px;padding:10px 16px;font-weight:650;cursor:pointer;font-size:15px}
+.btn.sec{background:var(--card2);color:var(--tx)}
+.btn.bad{background:var(--bad);color:#fff}
+.btn.sm{padding:6px 12px;font-size:13px;border-radius:10px}
+.fab{position:fixed;right:18px;bottom:84px;width:56px;height:56px;border-radius:50%;background:var(--acc);color:#04130d;font-size:30px;border:0;box-shadow:0 8px 24px #0008;cursor:pointer;z-index:6}
+.sheet-bg{position:fixed;inset:0;background:#000a;z-index:20;display:flex;align-items:flex-end;justify-content:center}
+.sheet{background:var(--card);width:100%;max-width:560px;border-radius:22px 22px 0 0;padding:18px 18px calc(18px + env(safe-area-inset-bottom));max-height:92vh;overflow:auto;animation:up .2s ease-out}
+@keyframes up{from{transform:translateY(40px);opacity:0}}
+.sheet h3{margin:0 0 12px}
+label{display:block;font-size:13px;color:var(--mut);margin:10px 0 4px}
+input,select,textarea{width:100%;background:var(--card2);border:1px solid var(--line);color:var(--tx);border-radius:12px;padding:11px 12px;font:inherit}
+textarea{min-height:80px;resize:vertical}
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0}
+.chip{background:var(--card2);border:1px solid var(--line);color:var(--tx);border-radius:99px;padding:5px 11px;font-size:13px;cursor:pointer}
+.chip.on{background:var(--acc);color:#04130d;border-color:var(--acc)}
+.actions{display:flex;gap:8px;margin-top:16px}
+.actions .btn{flex:1}
+.empty{text-align:center;color:var(--mut);padding:36px 12px}
+.empty .big{font-size:42px}
+.toast{position:fixed;left:50%;bottom:96px;transform:translateX(-50%);background:var(--card2);border:1px solid var(--line);padding:10px 16px;border-radius:12px;z-index:30;display:flex;gap:12px;align-items:center}
+.toast button{background:none;border:0;color:var(--acc);font-weight:650;cursor:pointer}
+.banner{border:1px solid color-mix(in srgb,var(--warn) 50%,transparent);background:color-mix(in srgb,var(--warn) 10%,transparent);border-radius:var(--r);padding:12px 14px;margin-bottom:14px}
+.banner.bad{border-color:color-mix(in srgb,var(--bad) 50%,transparent);background:color-mix(in srgb,var(--bad) 10%,transparent)}
+.kv{display:grid;grid-template-columns:120px 1fr;gap:6px 12px;font-size:14px}
+.kv dt{color:var(--mut)}.kv dd{margin:0;word-break:break-word}
+.thumb{width:46px;height:46px;border-radius:10px;object-fit:cover;background:var(--card2);flex:none;display:grid;place-items:center;font-size:22px}
+a{color:var(--acc2)}
+.hero{display:flex;align-items:center;gap:14px;margin-bottom:14px}
+.hero .bigic{font-size:44px}
+.small{font-size:13px;color:var(--mut)}
+</style>
+</head>
+<body>
+<header>
+  <button class="ib" id="back" style="display:none" aria-label="Back">‹</button>
+  <h1 id="title">HomeLogger</h1>
+  <button class="ib" id="hsearch" aria-label="Search">🔍</button>
+</header>
+<main id="app"></main>
+<nav class="bot" id="nav">
+  <button data-v="home"><span>🏠</span>Home</button>
+  <button data-v="docs"><span>📁</span>Documents</button>
+  <button data-v="search"><span>🔍</span>Search</button>
+  <button data-v="settings"><span>⚙️</span>Settings</button>
+</nav>
+
+<script>
+'use strict';
+const $ = s => document.querySelector(s);
+const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+let S = { areas: [], tasks: [], records: [], documents: [], settings: {} };
+let view = { name: 'home' };
+const stack = [];
+
+const ICONS = ['🏠','❄️','🔥','🚿','💧','⚡','🧊','🍳','🧺','🪟','🚪','🌳','🏊','🔑','🛋️','🛏️','🚽','🏚️','🔌','🪜','🧯','🐜','🌡️','🚗'];
+const COLORS = ['#2ee6a6','#4aa8ff','#ffb84a','#ff5d6c','#b58cff','#ff8ad8','#5ee0ff','#a3e635'];
+const QUICK = {'HVAC':'❄️','Roof':'🏚️','Water heater':'🚿','Plumbing':'💧','Electrical':'⚡','Kitchen':'🍳','Laundry':'🧺','Garage':'🚗','Yard':'🌳','Windows & doors':'🪟','Appliances':'🔌','Pool':'🏊'};
+const DOC_CATS = ['Receipt','Warranty','Manual','Insurance','Deed / Title','Permit','Inspection','Tax','Contract','Photo','Other'];
+const REC_TYPES = { maintenance: '🔧 Maintenance', repair: '🛠️ Repair', upgrade: '⬆️ Upgrade' };
+const INTERVALS = [['', 'One-time'], ['1', 'Every month'], ['3', 'Every 3 months'], ['6', 'Every 6 months'], ['12', 'Every year'], ['24', 'Every 2 years'], ['36', 'Every 3 years'], ['60', 'Every 5 years']];
+
+async function api(method, url, body, raw) {
+  const opt = { method, headers: {} };
+  if (raw) { opt.body = raw; } else if (body !== undefined) { opt.body = JSON.stringify(body); opt.headers['Content-Type'] = 'application/json'; }
+  const r = await fetch(url, opt);
+  if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || r.statusText);
+  return r.json();
+}
+async function load() { S = await api('GET', '/api/all'); }
+const today = () => new Date().toISOString().slice(0, 10);
+const days = d => Math.round((new Date(d + 'T12:00:00') - new Date(today() + 'T12:00:00')) / 864e5);
+function fmt(d) { if (!d) return ''; return new Date(d + 'T12:00:00').toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }); }
+function dueInfo(d) {
+  if (!d) return { cls: '', txt: 'No date' };
+  const n = days(d);
+  if (n < 0) return { cls: 'bad', txt: Math.abs(n) + 'd overdue', n };
+  if (n === 0) return { cls: 'warn', txt: 'Due today', n };
+  if (n <= 30) return { cls: 'warn', txt: 'In ' + n + 'd', n };
+  return { cls: 'ok', txt: fmt(d), n };
+}
+const areaOf = id => S.areas.find(a => a.id === id);
+const fileUrl = (id, dl) => '/api/files/' + id + (dl ? '?download=1' : '');
+function toast(msg, undo) {
+  document.querySelectorAll('.toast').forEach(t => t.remove());
+  const t = document.createElement('div'); t.className = 'toast';
+  t.innerHTML = '<span>' + esc(msg) + '</span>' + (undo ? '<button>Undo</button>' : '');
+  if (undo) t.querySelector('button').onclick = () => { undo(); t.remove(); };
+  document.body.appendChild(t); setTimeout(() => t.remove(), undo ? 6000 : 2200);
+}
+
+// ---------- Sheets ----------
+function sheet(html, onMount) {
+  const bg = document.createElement('div'); bg.className = 'sheet-bg';
+  bg.innerHTML = '<div class="sheet">' + html + '</div>';
+  bg.addEventListener('mousedown', e => { if (e.target === bg) bg.remove(); });
+  document.body.appendChild(bg);
+  const el = bg.querySelector('.sheet');
+  el.close = () => bg.remove();
+  onMount && onMount(el);
+  return el;
+}
+const val = (el, n) => el.querySelector('[name=' + n + ']').value.trim();
+
+function areaForm(a) {
+  a = a || {};
+  let icon = a.icon || '🏠', color = a.color || COLORS[0];
+  sheet(`<h3>${a.id ? 'Edit area' : 'New area / system'}</h3>
+    ${a.id ? '' : '<label>Quick start</label><div class="chips" id="q">' + Object.keys(QUICK).map(q => '<span class="chip">' + esc(q) + '</span>').join('') + '</div>'}
+    <label>Name</label><input name="name" value="${esc(a.name)}" placeholder="e.g. HVAC, Roof, Kitchen">
+    <label>Icon</label><div class="chips" id="icons">${ICONS.map(i => '<span class="chip' + (i === icon ? ' on' : '') + '" data-i="' + i + '">' + i + '</span>').join('')}</div>
+    <label>Color</label><div class="chips" id="cols">${COLORS.map(c => '<span class="chip' + (c === color ? ' on' : '') + '" data-c="' + c + '" style="background:' + c + ';width:34px;height:28px"></span>').join('')}</div>
+    <label>Cover photo (optional)</label><input type="file" name="cover" accept="image/*">
+    <div class="actions"><button class="btn sec" id="cancel">Cancel</button><button class="btn" id="ok">Save</button></div>`,
+  el => {
+    el.querySelector('#cancel').onclick = el.close;
+    const q = el.querySelector('#q');
+    if (q) q.onclick = e => { if (!e.target.classList.contains('chip')) return; const n = e.target.textContent; el.querySelector('[name=name]').value = n; icon = QUICK[n]; el.querySelectorAll('#icons .chip').forEach(c => c.classList.toggle('on', c.dataset.i === icon)); };
+    el.querySelector('#icons').onclick = e => { const i = e.target.dataset.i; if (!i) return; icon = i; el.querySelectorAll('#icons .chip').forEach(c => c.classList.toggle('on', c.dataset.i === i)); };
+    el.querySelector('#cols').onclick = e => { const c = e.target.dataset.c; if (!c) return; color = c; el.querySelectorAll('#cols .chip').forEach(x => x.classList.toggle('on', x.dataset.c === c)); };
+    el.querySelector('#ok').onclick = async () => {
+      const name = val(el, 'name'); if (!name) return toast('Give it a name');
+      const body = { name, icon, color };
+      const f = el.querySelector('[name=cover]').files[0];
+      if (f) { const up = await api('POST', '/api/files', undefined, f); body.coverId = up.fileId; }
+      if (a.id) await api('PUT', '/api/areas/' + a.id, body); else await api('POST', '/api/areas', body);
+      el.close(); await load(); render();
+    };
+  });
+}
+
+function taskForm(areaId, t) {
+  t = t || {};
+  sheet(`<h3>${t.id ? 'Edit task' : 'New maintenance task'}</h3>
+    <label>Task</label><input name="title" value="${esc(t.title)}" placeholder="e.g. Replace furnace filter">
+    <label>Repeats</label><select name="interval">${INTERVALS.map(([v, l]) => '<option value="' + v + '"' + (String(t.intervalMonths || '') === v ? ' selected' : '') + '>' + l + '</option>').join('')}</select>
+    <label>Next due</label><input type="date" name="due" value="${esc(t.nextDue || '')}">
+    <label>Notes</label><textarea name="notes">${esc(t.notes)}</textarea>
+    <div class="actions">${t.id ? '<button class="btn bad" id="del">Delete</button>' : ''}<button class="btn sec" id="cancel">Cancel</button><button class="btn" id="ok">Save</button></div>`,
+  el => {
+    el.querySelector('#cancel').onclick = el.close;
+    if (t.id) el.querySelector('#del').onclick = async () => { const copy = { ...t }; await api('DELETE', '/api/tasks/' + t.id); el.close(); await load(); render(); toast('Task deleted', async () => { await api('POST', '/api/tasks', copy); await load(); render(); }); };
+    el.querySelector('#ok').onclick = async () => {
+      const title = val(el, 'title'); if (!title) return toast('Give it a name');
+      const body = { areaId, title, intervalMonths: val(el, 'interval'), nextDue: val(el, 'due'), notes: val(el, 'notes') };
+      if (t.id) await api('PUT', '/api/tasks/' + t.id, body); else await api('POST', '/api/tasks', body);
+      el.close(); await load(); render();
+    };
+  });
+}
+
+function doneForm(t) {
+  sheet(`<h3>Mark done: ${esc(t.title)}</h3>
+    <label>Date done</label><input type="date" name="date" value="${today()}">
+    <label>Who did it / vendor (optional)</label><input name="vendor">
+    <label>Notes (optional)</label><textarea name="notes"></textarea>
+    <p class="small">${t.intervalMonths ? 'The next reminder is set automatically.' : 'This is a one-time task, so it will have no further reminder.'} A history entry is added.</p>
+    <div class="actions"><button class="btn sec" id="cancel">Cancel</button><button class="btn" id="ok">Done</button></div>`,
+  el => {
+    el.querySelector('#cancel').onclick = el.close;
+    el.querySelector('#ok').onclick = async () => {
+      await api('POST', '/api/tasks/' + t.id + '/done', { date: val(el, 'date') || today(), vendor: val(el, 'vendor'), notes: val(el, 'notes') });
+      el.close(); await load(); render(); toast('Logged');
+    };
+  });
+}
+
+function recordForm(areaId, r, preset) {
+  r = r || preset || {};
+  sheet(`<h3>${r.id ? 'Edit entry' : 'Log work'}</h3>
+    <label>Type</label><div class="chips" id="types">${Object.entries(REC_TYPES).map(([k, v]) => '<span class="chip' + ((r.type || 'maintenance') === k ? ' on' : '') + '" data-t="' + k + '">' + v + '</span>').join('')}</div>
+    <label>What was done</label><input name="title" value="${esc(r.title)}" placeholder="e.g. Replaced water heater">
+    <label>Date</label><input type="date" name="date" value="${esc(r.date || today())}">
+    <label>Who / vendor</label><input name="vendor" value="${esc(r.vendor)}">
+    <label>Parts / materials</label><input name="parts" value="${esc(r.parts)}" placeholder="e.g. 16x25x1 MERV 11 filter">
+    <label>Notes</label><textarea name="notes">${esc(r.notes)}</textarea>
+    ${r.id ? '' : '<label>Attach receipt / photo / file</label><input type="file" name="file" multiple><label>Document category</label><select name="cat">' + DOC_CATS.map(c => '<option>' + c + '</option>').join('') + '</select>'}
+    <div class="actions">${r.id ? '<button class="btn bad" id="del">Delete</button>' : ''}<button class="btn sec" id="cancel">Cancel</button><button class="btn" id="ok">Save</button></div>`,
+  el => {
+    let type = r.type || 'maintenance';
+    el.querySelector('#types').onclick = e => { const t = e.target.dataset.t; if (!t) return; type = t; el.querySelectorAll('#types .chip').forEach(c => c.classList.toggle('on', c.dataset.t === t)); };
+    el.querySelector('#cancel').onclick = el.close;
+    if (r.id) el.querySelector('#del').onclick = async () => { if (!confirm('Delete this entry and its attached files?')) return; await api('DELETE', '/api/records/' + r.id); el.close(); await load(); render(); toast('Deleted'); };
+    el.querySelector('#ok').onclick = async () => {
+      const title = val(el, 'title'); if (!title) return toast('Describe the work');
+      const body = { areaId, type, title, date: val(el, 'date') || today(), vendor: val(el, 'vendor'), parts: val(el, 'parts'), notes: val(el, 'notes') };
+      let rec;
+      if (r.id) rec = await api('PUT', '/api/records/' + r.id, body); else rec = await api('POST', '/api/records', body);
+      const fi = el.querySelector('[name=file]');
+      if (fi) for (const f of fi.files) await uploadDoc(f, { areaId, recordId: rec.id, category: val(el, 'cat'), title: f.name });
+      el.close(); await load(); render(); toast('Saved');
+    };
+  });
+}
+
+async function uploadDoc(file, meta) {
+  const up = await api('POST', '/api/files', undefined, file);
+  return api('POST', '/api/documents', Object.assign({ fileId: up.fileId, fileName: file.name, mime: file.type || 'application/octet-stream', size: file.size }, meta));
+}
+
+function docForm(areaId, d, recordId) {
+  d = d || {};
+  const areaOpts = '<option value="">General (whole home)</option>' + S.areas.map(a => '<option value="' + a.id + '"' + ((d.areaId || areaId) === a.id ? ' selected' : '') + '>' + esc(a.icon + ' ' + a.name) + '</option>').join('');
+  sheet(`<h3>${d.id ? 'Edit document' : 'Add document'}</h3>
+    ${d.id ? '' : '<label>File</label><input type="file" name="file" multiple>'}
+    <label>Title</label><input name="title" value="${esc(d.title)}" placeholder="Defaults to the file name">
+    <label>Category</label><select name="cat">${DOC_CATS.map(c => '<option' + (d.category === c ? ' selected' : '') + '>' + c + '</option>').join('')}</select>
+    <label>Belongs to</label><select name="area">${areaOpts}</select>
+    <label>Expires / warranty ends (optional)</label><input type="date" name="exp" value="${esc(d.expires || '')}">
+    <label>Notes</label><textarea name="notes">${esc(d.notes)}</textarea>
+    <div class="actions">${d.id ? '<button class="btn bad" id="del">Delete</button>' : ''}<button class="btn sec" id="cancel">Cancel</button><button class="btn" id="ok">Save</button></div>`,
+  el => {
+    el.querySelector('#cancel').onclick = el.close;
+    if (d.id) el.querySelector('#del').onclick = async () => { if (!confirm('Delete this document and its file?')) return; await api('DELETE', '/api/documents/' + d.id); el.close(); await load(); render(); toast('Deleted'); };
+    el.querySelector('#ok').onclick = async () => {
+      const meta = { category: val(el, 'cat'), areaId: val(el, 'area'), expires: val(el, 'exp'), notes: val(el, 'notes') };
+      if (d.id) { await api('PUT', '/api/documents/' + d.id, Object.assign(meta, { title: val(el, 'title') || d.title })); }
+      else {
+        const files = el.querySelector('[name=file]').files;
+        if (!files.length) return toast('Choose a file');
+        el.querySelector('#ok').disabled = true; el.querySelector('#ok').textContent = 'Uploading…';
+        for (const f of files) await uploadDoc(f, Object.assign({}, meta, recordId ? { recordId } : {}, { title: files.length === 1 && val(el, 'title') ? val(el, 'title') : f.name }));
+      }
+      el.close(); await load(); render(); toast('Saved');
+    };
+  });
+}
+
+const DETAIL_FIELDS = [['brand', 'Brand / model'], ['serial', 'Serial number'], ['installed', 'Installed / purchased'], ['warranty', 'Warranty until'], ['location', 'Location in home'], ['installer', 'Installer / contractor'], ['notes', 'Notes']];
+function infoForm(a) {
+  const d = a.details || {};
+  sheet(`<h3>Info: ${esc(a.name)}</h3>` + DETAIL_FIELDS.map(([k, l]) => '<label>' + l + '</label>' + (k === 'notes' ? '<textarea name="' + k + '">' + esc(d[k]) + '</textarea>' : '<input name="' + k + '" value="' + esc(d[k]) + '">')).join('') +
+    '<div class="actions"><button class="btn sec" id="cancel">Cancel</button><button class="btn" id="ok">Save</button></div>',
+  el => {
+    el.querySelector('#cancel').onclick = el.close;
+    el.querySelector('#ok').onclick = async () => {
+      const details = {}; DETAIL_FIELDS.forEach(([k]) => details[k] = val(el, k));
+      await api('PUT', '/api/areas/' + a.id, { details }); el.close(); await load(); render();
+    };
+  });
+}
+
+// ---------- Views ----------
+function attention() {
+  const items = [];
+  for (const t of S.tasks) { if (!t.nextDue) continue; const n = days(t.nextDue); if (n <= 14) items.push({ kind: 'task', n, t, area: areaOf(t.areaId) }); }
+  for (const d of S.documents) { if (!d.expires) continue; const n = days(d.expires); if (n <= 45) items.push({ kind: 'doc', n, d, area: areaOf(d.areaId) }); }
+  return items.sort((a, b) => a.n - b.n);
+}
+
+function taskRow(t, showArea) {
+  const di = dueInfo(t.nextDue), a = areaOf(t.areaId);
+  return `<div class="row" data-task="${t.id}"><div class="grow"><div class="t">${esc(t.title)}</div>
+    <div class="s">${showArea && a ? esc(a.icon + ' ' + a.name) + ' · ' : ''}${t.intervalMonths ? 'every ' + (t.intervalMonths % 12 === 0 ? (t.intervalMonths / 12) + 'y' : t.intervalMonths + 'mo') : 'one-time'}${t.lastDone ? ' · last ' + fmt(t.lastDone) : ''}</div></div>
+    <span class="pill ${di.cls}">${esc(di.txt)}</span><button class="btn sm" data-done="${t.id}">Done</button></div>`;
+}
+
+function renderHome() {
+  const att = attention();
+  let h = '';
+  const overdue = att.filter(x => x.n < 0);
+  if (att.length) {
+    h += `<div class="banner ${overdue.length ? 'bad' : ''}"><b>${overdue.length ? overdue.length + ' overdue · ' : ''}${att.length} need attention</b></div>`;
+    h += att.slice(0, 8).map(x => x.kind === 'task' ? taskRow(x.t, true) :
+      `<div class="row" data-doc="${x.d.id}"><div class="thumb">📄</div><div class="grow"><div class="t">${esc(x.d.title)}</div><div class="s">${esc(x.d.category || '')} · expires ${fmt(x.d.expires)}</div></div><span class="pill ${x.n < 0 ? 'bad' : 'warn'}">${x.n < 0 ? 'Expired' : x.n + 'd left'}</span></div>`).join('');
+    if (att.length > 8) h += `<div class="small" style="margin:4px 0 12px">+ ${att.length - 8} more</div>`;
+  }
+  h += '<h2>My home</h2>';
+  if (!S.areas.length) h += '<div class="empty"><div class="big">🏠</div><p>Add the areas and systems you maintain:<br>HVAC, roof, water heater, kitchen…</p><button class="btn" id="addArea">Add your first area</button></div>';
+  else {
+    h += '<div class="grid">' + S.areas.slice().sort((a, b) => (a.order ?? 1e9) - (b.order ?? 1e9)).map(a => {
+      const ts = S.tasks.filter(t => t.areaId === a.id && t.nextDue).sort((x, y) => x.nextDue < y.nextDue ? -1 : 1);
+      const di = ts.length ? dueInfo(ts[0].nextDue) : null;
+      return `<div class="card area" data-area="${a.id}"><div class="bar" style="background:${a.color || 'var(--acc)'}"></div>${a.coverId ? '<div class="cover" style="background-image:url(' + fileUrl(a.coverId) + ')"></div>' : ''}
+        <div class="ic">${esc(a.icon || '🏠')}</div><div class="nm">${esc(a.name)}</div>
+        <div class="st">${di ? '<span class="pill ' + di.cls + '">' + esc(di.txt) + '</span> ' + esc(ts[0].title) : S.tasks.filter(t => t.areaId === a.id).length ? 'All caught up' : 'No tasks yet'}</div></div>`;
+    }).join('') + '</div>';
+  }
+  return h + '<button class="fab" id="fabArea" aria-label="Add area">+</button>';
+}
+
+function renderArea() {
+  const a = areaOf(view.id); if (!a) { view = { name: 'home' }; return renderHome(); }
+  const tab = view.tab || 'dash';
+  const tasks = S.tasks.filter(t => t.areaId === a.id).sort((x, y) => (x.nextDue || '9') < (y.nextDue || '9') ? -1 : 1);
+  const recs = S.records.filter(r => r.areaId === a.id).sort((x, y) => x.date < y.date ? 1 : -1);
+  const docs = S.documents.filter(d => d.areaId === a.id).sort((x, y) => x.createdAt < y.createdAt ? 1 : -1);
+  let h = `<div class="hero"><div class="bigic">${esc(a.icon)}</div><div class="grow"><div class="small">${tasks.length} tasks · ${recs.length} entries · ${docs.length} docs</div></div><button class="btn sec sm" id="editArea">Edit</button></div>`;
+  h += '<div class="tabs">' + [['dash', 'Dashboard'], ['tasks', 'Tasks'], ['hist', 'History'], ['docs', 'Documents'], ['info', 'Info']].map(([k, l]) => `<button data-tab="${k}" class="${tab === k ? 'on' : ''}">${l}</button>`).join('') + '</div>';
+  let fab = '';
+  if (tab === 'dash') {
+    const next = tasks.filter(t => t.nextDue).slice(0, 4);
+    h += '<h2>Upcoming</h2>' + (next.length ? next.map(t => taskRow(t)).join('') : '<div class="empty small">No reminders set. Add a task under Tasks.</div>');
+    h += '<h2>Recent work</h2>' + (recs.length ? recs.slice(0, 4).map(recRow).join('') : '<div class="empty small">Nothing logged yet.</div>');
+    const exp = docs.filter(d => d.expires).sort((x, y) => x.expires < y.expires ? -1 : 1).slice(0, 3);
+    if (exp.length) h += '<h2>Warranties & expiries</h2>' + exp.map(docRow).join('');
+    fab = '<button class="fab" id="fabMenu">+</button>';
+  } else if (tab === 'tasks') {
+    h += tasks.length ? tasks.map(t => taskRow(t)).join('') : '<div class="empty"><div class="big">⏰</div>Recurring tasks like “change filter” live here.</div>';
+    fab = '<button class="fab" id="fabTask">+</button>';
+  } else if (tab === 'hist') {
+    const f = view.filter || 'all';
+    h += '<div class="chips">' + [['all', 'All'], ...Object.entries(REC_TYPES)].map(([k, l]) => `<span class="chip ${f === k ? 'on' : ''}" data-filter="${k}">${l}</span>`).join('') + '</div>';
+    const list = recs.filter(r => f === 'all' || r.type === f);
+    h += list.length ? list.map(recRow).join('') : '<div class="empty"><div class="big">📒</div>Log maintenance, repairs and upgrades here.</div>';
+    fab = '<button class="fab" id="fabRec">+</button>';
+  } else if (tab === 'docs') {
+    h += docs.length ? docs.map(docRow).join('') : '<div class="empty"><div class="big">📁</div>Receipts, manuals and warranties for this area.</div>';
+    fab = '<button class="fab" id="fabDoc">+</button>';
+  } else {
+    const d = a.details || {};
+    const filled = DETAIL_FIELDS.filter(([k]) => d[k]);
+    h += filled.length ? '<div class="card"><dl class="kv">' + filled.map(([k, l]) => `<dt>${l}</dt><dd>${esc(d[k])}</dd>`).join('') + '</dl></div>' : '<div class="empty small">No details yet (model, serial number, install date, warranty).</div>';
+    h += '<div class="actions"><button class="btn" id="editInfo">Edit info</button><button class="btn bad" id="delArea">Delete area</button></div>';
+  }
+  return h + fab;
+}
+
+function recRow(r) {
+  const n = S.documents.filter(d => d.recordId === r.id).length;
+  return `<div class="row" data-rec="${r.id}"><div class="thumb">${(REC_TYPES[r.type] || '🔧').split(' ')[0]}</div><div class="grow"><div class="t">${esc(r.title)}</div>
+    <div class="s">${fmt(r.date)}${r.vendor ? ' · ' + esc(r.vendor) : ''}${r.parts ? ' · ' + esc(r.parts) : ''}${n ? ' · 📎 ' + n : ''}</div></div></div>`;
+}
+
+function docRow(d) {
+  const isImg = (d.mime || '').startsWith('image/');
+  const a = areaOf(d.areaId);
+  const ex = d.expires ? dueInfo(d.expires) : null;
+  return `<div class="row" data-doc="${d.id}">${isImg ? '<img class="thumb" loading="lazy" src="' + fileUrl(d.fileId) + '">' : '<div class="thumb">' + ((d.mime || '').includes('pdf') ? '📕' : '📄') + '</div>'}
+    <div class="grow"><div class="t">${esc(d.title)}</div><div class="s">${esc(d.category || '')}${a ? ' · ' + esc(a.name) : ''}${d.size ? ' · ' + (d.size > 1e6 ? (d.size / 1e6).toFixed(1) + ' MB' : Math.max(1, Math.round(d.size / 1e3)) + ' KB') : ''}</div></div>
+    ${ex ? '<span class="pill ' + (ex.n < 0 ? 'bad' : ex.cls) + '">' + (ex.n < 0 ? 'Expired' : 'Until ' + fmt(d.expires)) + '</span>' : ''}</div>`;
+}
+
+function renderDocs() {
+  const cat = view.cat || 'all';
+  const cats = ['all', ...DOC_CATS.filter(c => S.documents.some(d => d.category === c))];
+  const list = S.documents.filter(d => cat === 'all' || d.category === cat).sort((x, y) => x.createdAt < y.createdAt ? 1 : -1);
+  return '<div class="chips">' + cats.map(c => `<span class="chip ${cat === c ? 'on' : ''}" data-cat="${c}">${c === 'all' ? 'All' : c}</span>`).join('') + '</div>' +
+    (list.length ? list.map(docRow).join('') : '<div class="empty"><div class="big">📁</div><p>Your home document library.<br>Deed, insurance, permits, inspection reports, receipts.</p></div>') +
+    '<button class="fab" id="fabDoc">+</button>';
+}
+
+function renderSearch() {
+  return `<input id="q" placeholder="Search tasks, work, documents, areas…" value="${esc(view.q || '')}" autofocus><div id="results" style="margin-top:14px"></div>`;
+}
+function runSearch(q) {
+  q = q.toLowerCase().trim();
+  const out = $('#results'); if (!q) { out.innerHTML = '<div class="empty small">Type to search everything.</div>'; return; }
+  const m = (...f) => f.some(x => String(x || '').toLowerCase().includes(q));
+  const areas = S.areas.filter(a => m(a.name, ...Object.values(a.details || {})));
+  const tasks = S.tasks.filter(t => m(t.title, t.notes));
+  const recs = S.records.filter(r => m(r.title, r.vendor, r.parts, r.notes));
+  const docs = S.documents.filter(d => m(d.title, d.category, d.notes, d.fileName, (areaOf(d.areaId) || {}).name));
+  let h = '';
+  if (areas.length) h += '<h2>Areas</h2>' + areas.map(a => `<div class="row" data-area="${a.id}"><div class="thumb">${esc(a.icon)}</div><div class="grow t">${esc(a.name)}</div></div>`).join('');
+  if (tasks.length) h += '<h2>Tasks</h2>' + tasks.map(t => taskRow(t, true)).join('');
+  if (recs.length) h += '<h2>History</h2>' + recs.map(recRow).join('');
+  if (docs.length) h += '<h2>Documents</h2>' + docs.map(docRow).join('');
+  out.innerHTML = h || '<div class="empty small">No matches.</div>';
+}
+
+function renderSettings() {
+  return `<h2>Backup</h2><div class="card"><p class="small" style="margin-top:0">Downloads your data (areas, tasks, history, document list). Uploaded files live in the data folder and are included in your TrueNAS dataset snapshots. The server also keeps 14 daily backups automatically.</p>
+    <div class="actions"><a class="btn" href="/api/backup" download>Download backup</a><button class="btn sec" id="restore">Restore…</button></div><input type="file" id="restoreFile" accept=".json" style="display:none"></div>
+    <h2>Alerts</h2><div class="card"><p class="small" style="margin-top:0">Optional webhook (Home Assistant, ntfy, etc.). Receives a daily POST when tasks are due or documents expire within 30 days.</p>
+    <input id="hook" placeholder="https://…" value="${esc(S.settings.webhook || '')}"><div class="actions"><button class="btn" id="saveHook">Save</button></div></div>
+    <h2>Appearance</h2><div class="card"><select id="theme"><option value="dark">Dark</option><option value="light">Light</option></select></div>
+    <h2>About</h2><div class="small" id="ver">HomeLogger</div>`;
+}
+
+function render() {
+  const nav = view.name === 'area' ? 'home' : view.name;
+  document.querySelectorAll('#nav button').forEach(b => b.classList.toggle('on', b.dataset.v === nav));
+  $('#back').style.display = view.name === 'area' ? '' : 'none';
+  $('#title').textContent = view.name === 'area' ? (areaOf(view.id) || {}).name || '' : { home: 'HomeLogger', docs: 'Documents', search: 'Search', settings: 'Settings' }[view.name];
+  const app = $('#app');
+  const scroll = window.scrollY;
+  app.innerHTML = { home: renderHome, area: renderArea, docs: renderDocs, search: renderSearch, settings: renderSettings }[view.name]();
+  if (view.name === 'search') { runSearch(view.q || ''); $('#q').oninput = e => { view.q = e.target.value; runSearch(view.q); }; $('#q').focus(); }
+  if (view.name === 'settings') mountSettings();
+  window.scrollTo(0, scroll);
+}
+
+function mountSettings() {
+  fetch('/api/version').then(r => r.json()).then(v => { $('#ver').textContent = 'HomeLogger ' + v.version; });
+  const th = $('#theme'); th.value = localStorage.getItem('hl-theme') || 'dark';
+  th.onchange = () => { localStorage.setItem('hl-theme', th.value); applyTheme(); };
+  $('#saveHook').onclick = async () => { await api('PUT', '/api/settings', { webhook: $('#hook').value.trim() }); await load(); toast('Saved'); };
+  $('#restore').onclick = () => $('#restoreFile').click();
+  $('#restoreFile').onchange = async e => {
+    const f = e.target.files[0]; if (!f) return;
+    if (!confirm('Replace ALL current data with this backup?')) return;
+    try { await api('POST', '/api/restore', undefined, f); await load(); view = { name: 'home' }; render(); toast('Restored'); } catch (err) { alert('Restore failed: ' + err.message); }
+  };
+}
+function applyTheme() { document.documentElement.dataset.theme = localStorage.getItem('hl-theme') || 'dark'; }
+
+function go(v) { stack.push(view); view = v; window.scrollTo(0, 0); render(); }
+
+// ---------- Events ----------
+document.addEventListener('click', async e => {
+  const t = e.target;
+  const q = s => t.closest(s);
+  let el;
+  if ((el = q('[data-done]'))) { e.stopPropagation(); return doneForm(S.tasks.find(x => x.id === el.dataset.done)); }
+  if ((el = q('[data-task]'))) { const task = S.tasks.find(x => x.id === el.dataset.task); return taskForm(task.areaId, task); }
+  if ((el = q('[data-rec]'))) { const r = S.records.find(x => x.id === el.dataset.rec); return recordView(r); }
+  if ((el = q('[data-doc]'))) return docView(S.documents.find(x => x.id === el.dataset.doc));
+  if ((el = q('[data-area]'))) return go({ name: 'area', id: el.dataset.area, tab: 'dash' });
+  if ((el = q('[data-tab]'))) { view.tab = el.dataset.tab; return render(); }
+  if ((el = q('[data-filter]'))) { view.filter = el.dataset.filter; return render(); }
+  if ((el = q('[data-cat]'))) { view.cat = el.dataset.cat; return render(); }
+  if (q('#addArea') || q('#fabArea')) return areaForm();
+  if (q('#editArea')) return areaForm(areaOf(view.id));
+  if (q('#editInfo')) return infoForm(areaOf(view.id));
+  if (q('#fabTask')) return taskForm(view.id);
+  if (q('#fabRec')) return recordForm(view.id);
+  if (q('#fabDoc')) return docForm(view.name === 'area' ? view.id : '');
+  if (q('#fabMenu')) return sheet(`<h3>Add</h3><div class="actions" style="flex-direction:column">
+    <button class="btn" data-x="rec">🔧 Log work (maintenance, repair, upgrade)</button><button class="btn sec" data-x="task">⏰ New recurring task</button><button class="btn sec" data-x="doc">📎 Add document / receipt</button></div>`,
+    s => s.onclick = ev => { const x = ev.target.dataset.x; if (!x) return; s.close(); ({ rec: () => recordForm(view.id), task: () => taskForm(view.id), doc: () => docForm(view.id) })[x](); });
+  if (q('#delArea')) {
+    const a = areaOf(view.id);
+    if (!confirm('Delete "' + a.name + '" with all its tasks, history and documents? This cannot be undone.')) return;
+    await api('DELETE', '/api/areas/' + a.id); await load(); stack.length = 0; view = { name: 'home' }; render(); return toast('Area deleted');
+  }
+});
+$('#back').onclick = () => { view = stack.pop() || { name: 'home' }; render(); };
+$('#hsearch').onclick = () => { stack.length = 0; view = { name: 'search' }; render(); };
+$('#nav').onclick = e => { const b = e.target.closest('button'); if (!b) return; stack.length = 0; view = { name: b.dataset.v }; render(); };
+
+function recordView(r) {
+  const docs = S.documents.filter(d => d.recordId === r.id);
+  sheet(`<h3>${esc(r.title)}</h3><dl class="kv"><dt>Type</dt><dd>${REC_TYPES[r.type] || ''}</dd><dt>Date</dt><dd>${fmt(r.date)}</dd>${r.vendor ? '<dt>Vendor</dt><dd>' + esc(r.vendor) + '</dd>' : ''}${r.parts ? '<dt>Parts</dt><dd>' + esc(r.parts) + '</dd>' : ''}${r.notes ? '<dt>Notes</dt><dd>' + esc(r.notes) + '</dd>' : ''}</dl>
+    <h2>Attachments</h2>${docs.length ? docs.map(docRow).join('') : '<div class="small">None</div>'}
+    <div class="actions"><button class="btn sec" id="attach">📎 Attach</button><button class="btn" id="edit">Edit</button></div>`,
+  el => {
+    el.querySelector('#edit').onclick = () => { el.close(); recordForm(r.areaId, r); };
+    el.querySelector('#attach').onclick = () => { el.close(); docForm(r.areaId, null, r.id); };
+    el.querySelectorAll('[data-doc]').forEach(x => x.onclick = ev => { ev.stopPropagation(); el.close(); docView(S.documents.find(d => d.id === x.dataset.doc)); });
+  });
+}
+
+function docView(d) {
+  if (!d) return;
+  const img = (d.mime || '').startsWith('image/'), pdf = (d.mime || '').includes('pdf');
+  const a = areaOf(d.areaId), r = S.records.find(x => x.id === d.recordId);
+  sheet(`<h3>${esc(d.title)}</h3>
+    ${img ? '<img src="' + fileUrl(d.fileId) + '" style="width:100%;border-radius:12px;margin-bottom:10px">' : ''}
+    ${pdf ? '<iframe src="' + fileUrl(d.fileId) + '" style="width:100%;height:50vh;border:0;border-radius:12px;background:#fff;margin-bottom:10px"></iframe>' : ''}
+    <dl class="kv"><dt>Category</dt><dd>${esc(d.category || '')}</dd>${a ? '<dt>Area</dt><dd>' + esc(a.name) + '</dd>' : ''}${r ? '<dt>Work entry</dt><dd>' + esc(r.title) + '</dd>' : ''}${d.expires ? '<dt>Expires</dt><dd>' + fmt(d.expires) + '</dd>' : ''}<dt>File</dt><dd>${esc(d.fileName || '')}</dd>${d.notes ? '<dt>Notes</dt><dd>' + esc(d.notes) + '</dd>' : ''}</dl>
+    <div class="actions"><a class="btn sec" href="${fileUrl(d.fileId, true)}" download>Download</a><a class="btn sec" href="${fileUrl(d.fileId)}" target="_blank" rel="noopener">Open</a><button class="btn" id="edit">Edit</button></div>`,
+  el => { el.querySelector('#edit').onclick = () => { el.close(); docForm(d.areaId, d); }; });
+}
+
+applyTheme();
+load().then(render).catch(e => { $('#app').innerHTML = '<div class="empty">Could not load data: ' + esc(e.message) + '</div>'; });
+</script>
+</body>
+</html>
