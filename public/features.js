@@ -407,6 +407,7 @@ document.addEventListener('click', async e => {
     if (!confirm('Delete "' + p.title + '" with its photos and files? Work entries stay in the history.')) return;
     await api('DELETE', '/api/projects/' + p.id); await load(); view = stack.pop() || { name: 'projects' }; render(); return toast('Project deleted');
   }
+  if (q('#areaReport')) return go({ name: 'report', rep: { area: view.id } });
   if (q('#printRep')) return printReport();
 });
 document.addEventListener('change', e => {

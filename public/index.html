@@ -687,7 +687,7 @@ function renderArea() {
     const d = a.details || {};
     const filled = DETAIL_FIELDS.filter(([k]) => d[k]);
     h += filled.length ? '<div class="card"><dl class="kv">' + filled.map(([k, l]) => `<dt>${l}</dt><dd>${esc(d[k])}</dd>`).join('') + '</dl></div>' : '<div class="empty small">No details yet (model, serial number, install date, warranty).</div>';
-    h += '<div class="actions"><button class="btn" id="editInfo">Edit info</button><button class="btn bad" id="delArea">Delete area</button></div>';
+    h += '<div class="actions"><button class="btn" id="editInfo">Edit info</button><button class="btn sec" id="areaReport">📄 Report</button><button class="btn bad" id="delArea">Delete</button></div>';
   }
   return h + fab;
 }
