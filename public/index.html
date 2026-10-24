@@ -73,6 +73,25 @@ a{color:var(--acc2)}
 .hero{display:flex;align-items:center;gap:14px;margin-bottom:14px}
 .hero .bigic{font-size:44px}
 .small{font-size:13px;color:var(--mut)}
+.quick{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:0 0 6px}
+.quick button{background:var(--card);border:1px solid var(--line);color:var(--tx);border-radius:14px;padding:12px 6px;font-size:13px;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:4px}
+.quick button span{font-size:24px}
+.two{display:flex;gap:22px;flex-wrap:wrap}.big2{font-size:22px;font-weight:700}
+.prog{height:6px;background:var(--card2);border-radius:99px;margin-top:6px;overflow:hidden}.prog div{height:100%;background:var(--acc);border-radius:99px}
+label.pick{display:flex;align-items:flex-start;gap:10px;font-size:15px;color:var(--tx);margin:0;padding:9px 4px;border-bottom:1px solid var(--line);cursor:pointer}
+label.pick input{width:auto;padding:0;border:0;background:none;margin-top:3px;flex:none}
+.phs{display:grid;grid-template-columns:repeat(auto-fill,minmax(96px,1fr));gap:8px}
+.phs img{width:100%;aspect-ratio:1;object-fit:cover;border-radius:10px;cursor:pointer;background:var(--card2)}
+.rep{background:#fff;color:#111;border-radius:12px;padding:18px;line-height:1.35}
+.rep h1{font-size:22px;margin:0 0 4px}
+.rep h2{color:#111;text-transform:none;letter-spacing:0;font-size:18px;border-bottom:2px solid #222;padding-bottom:3px;margin:22px 0 8px}
+.rep h3{font-size:14px;margin:12px 0 4px}
+.rep table{width:100%;border-collapse:collapse;font-size:13px;margin-bottom:6px}
+.rep td,.rep th{border-bottom:1px solid #ddd;padding:5px 6px;text-align:left;vertical-align:top}
+.rep th{background:#f2f2f2;font-size:12px}
+.rep .nw{white-space:nowrap}.rep .r{text-align:right}.rep .small{color:#555}
+.rimgs{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}.rimgs img{height:90px;border-radius:6px;object-fit:cover}
+@media print{header,nav.bot,.fab,.noprint,.toast,.sheet-bg{display:none!important}body{background:#fff!important;padding:0!important}main{max-width:none;padding:0}.rep{border-radius:0;padding:0}.rep h2{break-after:avoid}.rep tr{break-inside:avoid}.rimgs img{height:110px}}
 </style>
 </head>
 <body>
@@ -89,6 +108,7 @@ a{color:var(--acc2)}
   <button data-v="settings"><span>⚙️</span>Settings</button>
 </nav>
 
+<script src="features.js"></script>
 <script>
 'use strict';
 const LOCAL = !!window.AndroidBridge; // true inside the Android app: data lives on the phone
@@ -96,16 +116,16 @@ let APP_VERSION = 'dev';
 const GH_REPO = 'Orangitaz/HomeLogger';
 const $ = s => document.querySelector(s);
 const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-let S = { areas: [], tasks: [], records: [], documents: [], settings: {} };
+let S = { areas: [], tasks: [], records: [], documents: [], facts: [], projects: [], settings: {} };
 let view = { name: 'home' };
 const stack = [];
 
 const ICONS = ['🏠','❄️','🔥','🚿','💧','⚡','🧊','🍳','🧺','🪟','🚪','🌳','🏊','🔑','🛋️','🛏️','🚽','🏚️','🔌','🪜','🧯','🐜','🌡️','🚗'];
 const COLORS = ['#2ee6a6','#4aa8ff','#ffb84a','#ff5d6c','#b58cff','#ff8ad8','#5ee0ff','#a3e635'];
 const QUICK = {'HVAC':'❄️','Roof':'🏚️','Water heater':'🚿','Plumbing':'💧','Electrical':'⚡','Kitchen':'🍳','Laundry':'🧺','Garage':'🚗','Yard':'🌳','Windows & doors':'🪟','Appliances':'🔌','Pool':'🏊'};
-const DOC_CATS = ['Receipt','Warranty','Manual','Insurance','Deed / Title','Permit','Inspection','Tax','Contract','Photo','Other'];
+const DOC_CATS = ['Receipt','Warranty','Manual','Insurance','Deed / Title','Permit','Inspection','Tax','Contract','Photo','Before','Progress','After','Other'];
 const REC_TYPES = { maintenance: '🔧 Maintenance', repair: '🛠️ Repair', upgrade: '⬆️ Upgrade' };
-const INTERVALS = [['', 'One-time'], ['1', 'Every month'], ['3', 'Every 3 months'], ['6', 'Every 6 months'], ['12', 'Every year'], ['24', 'Every 2 years'], ['36', 'Every 3 years'], ['60', 'Every 5 years']];
+const INTERVALS = [['', 'One-time'], ['1', 'Every month'], ['3', 'Every 3 months'], ['6', 'Every 6 months'], ['12', 'Every year'], ['24', 'Every 2 years'], ['36', 'Every 3 years'], ['60', 'Every 5 years'], ['120', 'Every 10 years']];
 
 async function remoteApi(method, url, body, raw) {
   const opt = { method, headers: {} };
@@ -135,11 +155,13 @@ const rid = () => Array.from(crypto.getRandomValues(new Uint8Array(6)), b => b.t
 const LKEYS = {
   areas: ['name', 'icon', 'color', 'notes', 'coverId', 'details', 'order'],
   tasks: ['areaId', 'title', 'intervalMonths', 'nextDue', 'lastDone', 'notes'],
-  records: ['areaId', 'type', 'date', 'title', 'vendor', 'notes', 'parts'],
-  documents: ['areaId', 'recordId', 'category', 'title', 'notes', 'expires', 'fileId', 'fileName', 'mime', 'size'],
+  records: ['areaId', 'projectId', 'type', 'date', 'title', 'vendor', 'notes', 'parts', 'cost'],
+  documents: ['areaId', 'recordId', 'projectId', 'factId', 'category', 'title', 'notes', 'expires', 'fileId', 'fileName', 'mime', 'size'],
+  facts: ['category', 'title', 'value', 'notes'],
+  projects: ['areaId', 'title', 'status', 'notes', 'startDate', 'endDate', 'budget', 'checklist'],
 };
-const EMPTY_DB = () => ({ areas: [], tasks: [], records: [], documents: [], deleted: [], settings: { webhook: '' } });
-const COLS = ['areas', 'tasks', 'records', 'documents'];
+const EMPTY_DB = () => ({ areas: [], tasks: [], records: [], documents: [], facts: [], projects: [], deleted: [], settings: { webhook: '' } });
+const COLS = ['areas', 'tasks', 'records', 'documents', 'facts', 'projects'];
 function addMonths(dateStr, m) {
   const d = new Date(dateStr + 'T12:00:00'); const day = d.getDate();
   d.setMonth(d.getMonth() + m); if (d.getDate() !== day) d.setDate(0);
@@ -148,6 +170,7 @@ function addMonths(dateStr, m) {
 async function localInit() {
   LDB = (await idb.get('kv', 'db')) || EMPTY_DB();
   if (!Array.isArray(LDB.deleted)) LDB.deleted = [];
+  for (const c of COLS) if (!Array.isArray(LDB[c])) LDB[c] = [];
   try { if (navigator.storage && navigator.storage.persist) navigator.storage.persist(); } catch (e) {}
   try { APP_VERSION = (await (await fetch('version.json')).json()).version || APP_VERSION; } catch (e) {}
 }
@@ -178,17 +201,25 @@ async function localApi(method, url, body, raw) {
       list.splice(list.indexOf(item), 1);
       const bury = (col, x) => { LDB.deleted = LDB.deleted.filter(t => !(t.col === col && t.id === x.id)); LDB.deleted.push({ col, id: x.id, at: now() }); };
       bury(a, item);
-      let gone = [];
+      const dropped = [];
+      const drop = (c, pred) => {
+        const g = LDB[c].filter(pred); LDB[c] = LDB[c].filter(x => !g.includes(x));
+        g.forEach(x => { bury(c, x); if (c === 'documents') dropped.push(x); });
+        return new Set(g.map(x => x.id));
+      };
       if (a === 'areas') {
-        LDB.tasks = LDB.tasks.filter(t => { if (t.areaId === item.id) bury('tasks', t); return t.areaId !== item.id; });
-        const rec = LDB.records.filter(r => r.areaId === item.id).map(r => r.id);
-        LDB.records = LDB.records.filter(r => { if (r.areaId === item.id) bury('records', r); return r.areaId !== item.id; });
-        gone = LDB.documents.filter(d => d.areaId === item.id || rec.includes(d.recordId));
+        drop('tasks', t => t.areaId === item.id);
+        const recs = drop('records', r => r.areaId === item.id);
+        const projs = drop('projects', p => p.areaId === item.id);
+        drop('documents', d => d.areaId === item.id || recs.has(d.recordId) || projs.has(d.projectId));
         if (item.coverId) await idb.del('files', item.coverId);
-      } else if (a === 'records') gone = LDB.documents.filter(d => d.recordId === item.id);
-      else if (a === 'documents') gone = [item];
-      if (a !== 'documents') LDB.documents = LDB.documents.filter(d => !gone.includes(d));
-      for (const d of gone) { if (a !== 'documents') bury('documents', d); if (d.fileId) await idb.del('files', d.fileId); }
+      } else if (a === 'records') drop('documents', d => d.recordId === item.id);
+      else if (a === 'facts') drop('documents', d => d.factId === item.id);
+      else if (a === 'projects') {
+        drop('documents', d => d.projectId === item.id);
+        for (const r of LDB.records) if (r.projectId === item.id) { r.projectId = ''; r.updatedAt = now(); } // keep the work entries, just unlink
+      } else if (a === 'documents') dropped.push(item);
+      for (const d of dropped) if (d.fileId) await idb.del('files', d.fileId);
       await lsave(); return { ok: true };
     }
   }
@@ -263,11 +294,11 @@ function applyPull(res, gone) {
       LDB[col][i] = x; changed = true;
     }
   }
-  // Drop anything whose area or work entry no longer exists.
+  // Drop anything whose area, work entry, project or home-info item no longer exists.
   const areaIds = new Set(LDB.areas.map(a => a.id));
-  for (const col of ['tasks', 'records']) LDB[col] = LDB[col].filter(x => { const ok = !x.areaId || areaIds.has(x.areaId); if (!ok) changed = true; return ok; });
-  const recIds = new Set(LDB.records.map(r => r.id));
-  LDB.documents = LDB.documents.filter(d => { const ok = (!d.areaId || areaIds.has(d.areaId)) && (!d.recordId || recIds.has(d.recordId)); if (!ok) { dropFile('documents', d); changed = true; } return ok; });
+  for (const col of ['tasks', 'records', 'projects']) LDB[col] = LDB[col].filter(x => { const ok = !x.areaId || areaIds.has(x.areaId); if (!ok) changed = true; return ok; });
+  const recIds = new Set(LDB.records.map(r => r.id)), proIds = new Set(LDB.projects.map(r => r.id)), facIds = new Set(LDB.facts.map(r => r.id));
+  LDB.documents = LDB.documents.filter(d => { const ok = (!d.areaId || areaIds.has(d.areaId)) && (!d.recordId || recIds.has(d.recordId)) && (!d.projectId || proIds.has(d.projectId)) && (!d.factId || facIds.has(d.factId)); if (!ok) { dropFile('documents', d); changed = true; } return ok; });
   const cutoff = new Date(Date.now() - 365 * 864e5).toISOString();
   LDB.deleted = LDB.deleted.filter(t => t.at > cutoff);
   return changed;
@@ -382,7 +413,7 @@ async function checkUpdate() {
 }
 window.__back = () => {
   const sh = document.querySelector('.sheet-bg'); if (sh) { sh.remove(); return true; }
-  if (view.name === 'area') { $('#back').click(); return true; }
+  if (!ROOTS.includes(view.name)) { $('#back').click(); return true; }
   if (view.name !== 'home') { stack.length = 0; view = { name: 'home' }; render(); return true; }
   return false;
 };
@@ -486,27 +517,42 @@ function doneForm(t) {
 
 function recordForm(areaId, r, preset) {
   r = r || preset || {};
+  const projOpts = '<option value="">None</option>' + S.projects.filter(p => p.status !== 'done' || p.id === r.projectId).map(p => `<option value="${p.id}"${r.projectId === p.id ? ' selected' : ''}>${esc(p.title)}</option>`).join('');
   sheet(`<h3>${r.id ? 'Edit entry' : 'Log work'}</h3>
     <label>Type</label><div class="chips" id="types">${Object.entries(REC_TYPES).map(([k, v]) => '<span class="chip' + ((r.type || 'maintenance') === k ? ' on' : '') + '" data-t="' + k + '">' + v + '</span>').join('')}</div>
     <label>What was done</label><input name="title" value="${esc(r.title)}" placeholder="e.g. Replaced water heater">
     <label>Date</label><input type="date" name="date" value="${esc(r.date || today())}">
     <label>Who / vendor</label><input name="vendor" value="${esc(r.vendor)}">
+    <label>Cost (optional)</label><input name="cost" inputmode="decimal" value="${r.cost ? esc(r.cost) : ''}" placeholder="0.00">
     <label>Parts / materials</label><input name="parts" value="${esc(r.parts)}" placeholder="e.g. 16x25x1 MERV 11 filter">
+    ${S.projects.length ? '<label>Part of project</label><select name="project">' + projOpts + '</select>' : '<input type="hidden" name="project" value="' + esc(r.projectId || '') + '">'}
     <label>Notes</label><textarea name="notes">${esc(r.notes)}</textarea>
-    ${r.id ? '' : '<label>Attach receipt / photo / file</label><input type="file" name="file" multiple><label>Document category</label><select name="cat">' + DOC_CATS.map(c => '<option>' + c + '</option>').join('') + '</select>'}
+    ${r.id ? '' : '<label>Attach receipt / photo / file</label><input type="file" name="file" multiple>' + scanBtn() + '<label>Document category</label><select name="cat">' + DOC_CATS.map(c => '<option>' + c + '</option>').join('') + '</select>'}
     <div class="actions">${r.id ? '<button class="btn bad" id="del">Delete</button>' : ''}<button class="btn sec" id="cancel">Cancel</button><button class="btn" id="ok">Save</button></div>`,
   el => {
     let type = r.type || 'maintenance';
     el.querySelector('#types').onclick = e => { const t = e.target.dataset.t; if (!t) return; type = t; el.querySelectorAll('#types .chip').forEach(c => c.classList.toggle('on', c.dataset.t === t)); };
     el.querySelector('#cancel').onclick = el.close;
+    wireScan(el, sc => {
+      const got = [], set = (n, v, force) => { const f = el.querySelector('[name=' + n + ']'); if (v && f && (force || !f.value.trim())) { f.value = v; return true; } return false; };
+      if (set('vendor', sc.vendor)) got.push('vendor');
+      if (set('title', sc.vendor ? 'Purchase at ' + sc.vendor : '')) got.push('what was done');
+      if (sc.date && set('date', sc.date, true)) got.push('date');
+      if (set('cost', sc.total ? sc.total.toFixed(2) : '')) got.push('total');
+      const c = el.querySelector('[name=cat]'); if (c) c.value = 'Receipt';
+      return got;
+    });
     if (r.id) el.querySelector('#del').onclick = async () => { if (!confirm('Delete this entry and its attached files?')) return; await api('DELETE', '/api/records/' + r.id); el.close(); await load(); render(); toast('Deleted'); };
     el.querySelector('#ok').onclick = async () => {
       const title = val(el, 'title'); if (!title) return toast('Describe the work');
-      const body = { areaId, type, title, date: val(el, 'date') || today(), vendor: val(el, 'vendor'), parts: val(el, 'parts'), notes: val(el, 'notes') };
+      const projectId = val(el, 'project'), proj = S.projects.find(p => p.id === projectId);
+      const area = areaId || (proj && proj.areaId) || '';
+      const costTxt = val(el, 'cost');
+      const body = { areaId: area, projectId, type, title, date: val(el, 'date') || today(), vendor: val(el, 'vendor'), parts: val(el, 'parts'), notes: val(el, 'notes'), cost: costTxt ? num(costTxt) : '' };
       let rec;
       if (r.id) rec = await api('PUT', '/api/records/' + r.id, body); else rec = await api('POST', '/api/records', body);
       const fi = el.querySelector('[name=file]');
-      if (fi) for (const f of fi.files) await uploadDoc(f, { areaId, recordId: rec.id, category: val(el, 'cat'), title: f.name });
+      if (fi) for (const f of fi.files) await uploadDoc(f, { areaId: area, recordId: rec.id, projectId, category: val(el, 'cat'), title: f.name });
       el.close(); await load(); render(); toast('Saved');
     };
   });
@@ -521,7 +567,7 @@ function docForm(areaId, d, recordId) {
   d = d || {};
   const areaOpts = '<option value="">General (whole home)</option>' + S.areas.map(a => '<option value="' + a.id + '"' + ((d.areaId || areaId) === a.id ? ' selected' : '') + '>' + esc(a.icon + ' ' + a.name) + '</option>').join('');
   sheet(`<h3>${d.id ? 'Edit document' : 'Add document'}</h3>
-    ${d.id ? '' : '<label>File</label><input type="file" name="file" multiple>'}
+    ${d.id ? '' : '<label>File</label><input type="file" name="file" multiple>' + scanBtn()}
     <label>Title</label><input name="title" value="${esc(d.title)}" placeholder="Defaults to the file name">
     <label>Category</label><select name="cat">${DOC_CATS.map(c => '<option' + (d.category === c ? ' selected' : '') + '>' + c + '</option>').join('')}</select>
     <label>Belongs to</label><select name="area">${areaOpts}</select>
@@ -530,6 +576,14 @@ function docForm(areaId, d, recordId) {
     <div class="actions">${d.id ? '<button class="btn bad" id="del">Delete</button>' : ''}<button class="btn sec" id="cancel">Cancel</button><button class="btn" id="ok">Save</button></div>`,
   el => {
     el.querySelector('#cancel').onclick = el.close;
+    wireScan(el, sc => {
+      const got = [], set = (n, v) => { const f = el.querySelector('[name=' + n + ']'); if (v && f && !f.value.trim()) { f.value = v; return true; } return false; };
+      if (set('title', sc.vendor ? sc.vendor + ' receipt' : '')) got.push('title');
+      const bits = [sc.total ? 'Total ' + money(sc.total) : '', sc.date ? 'on ' + fmt(sc.date) : ''].filter(Boolean).join(' ');
+      if (set('notes', bits)) got.push('total and date');
+      el.querySelector('[name=cat]').value = 'Receipt';
+      return got;
+    });
     if (d.id) el.querySelector('#del').onclick = async () => { if (!confirm('Delete this document and its file?')) return; await api('DELETE', '/api/documents/' + d.id); el.close(); await load(); render(); toast('Deleted'); };
     el.querySelector('#ok').onclick = async () => {
       const meta = { category: val(el, 'cat'), areaId: val(el, 'area'), expires: val(el, 'exp'), notes: val(el, 'notes') };
@@ -576,7 +630,8 @@ function taskRow(t, showArea) {
 
 function renderHome() {
   const att = attention();
-  let h = '';
+  let h = `<div class="quick"><button data-go="info"><span>🆘</span>Home info</button><button data-go="projects"><span>🏗️</span>Projects</button><button data-go="report"><span>📄</span>Report</button></div>`;
+  const hsp = spend(S.records); if (hsp.all) h += `<div class="small" style="margin:2px 2px 8px">Spent this year ${money(hsp.yr)} · all time ${money(hsp.all)}</div>`;
   const overdue = att.filter(x => x.n < 0);
   if (att.length) {
     h += `<div class="banner ${overdue.length ? 'bad' : ''}"><b>${overdue.length ? overdue.length + ' overdue · ' : ''}${att.length} need attention</b></div>`;
@@ -613,9 +668,11 @@ function renderArea() {
     h += '<h2>Recent work</h2>' + (recs.length ? recs.slice(0, 4).map(recRow).join('') : '<div class="empty small">Nothing logged yet.</div>');
     const exp = docs.filter(d => d.expires).sort((x, y) => x.expires < y.expires ? -1 : 1).slice(0, 3);
     if (exp.length) h += '<h2>Warranties & expiries</h2>' + exp.map(docRow).join('');
+    h += spendCard(recs);
     fab = '<button class="fab" id="fabMenu">+</button>';
   } else if (tab === 'tasks') {
-    h += tasks.length ? tasks.map(t => taskRow(t)).join('') : '<div class="empty"><div class="big">⏰</div>Recurring tasks like “change filter” live here.</div>';
+    h += '<div class="actions" style="margin:0 0 10px"><button class="btn sec" id="suggestTasks">✨ Suggested tasks</button></div>';
+    h += tasks.length ? tasks.map(t => taskRow(t)).join('') : '<div class="empty"><div class="big">⏰</div>Recurring tasks like “change filter” live here.<br>Tap Suggested tasks for ideas.</div>';
     fab = '<button class="fab" id="fabTask">+</button>';
   } else if (tab === 'hist') {
     const f = view.filter || 'all';
@@ -630,7 +687,7 @@ function renderArea() {
     const d = a.details || {};
     const filled = DETAIL_FIELDS.filter(([k]) => d[k]);
     h += filled.length ? '<div class="card"><dl class="kv">' + filled.map(([k, l]) => `<dt>${l}</dt><dd>${esc(d[k])}</dd>`).join('') + '</dl></div>' : '<div class="empty small">No details yet (model, serial number, install date, warranty).</div>';
-    h += '<div class="actions"><button class="btn" id="editInfo">Edit info</button><button class="btn bad" id="delArea">Delete area</button></div>';
+    h += '<div class="actions"><button class="btn" id="editInfo">Edit info</button><button class="btn sec" id="areaReport">📄 Report</button><button class="btn bad" id="delArea">Delete</button></div>';
   }
   return h + fab;
 }
@@ -638,7 +695,7 @@ function renderArea() {
 function recRow(r) {
   const n = S.documents.filter(d => d.recordId === r.id).length;
   return `<div class="row" data-rec="${r.id}"><div class="thumb">${(REC_TYPES[r.type] || '🔧').split(' ')[0]}</div><div class="grow"><div class="t">${esc(r.title)}</div>
-    <div class="s">${fmt(r.date)}${r.vendor ? ' · ' + esc(r.vendor) : ''}${r.parts ? ' · ' + esc(r.parts) : ''}${n ? ' · 📎 ' + n : ''}</div></div></div>`;
+    <div class="s">${fmt(r.date)}${r.vendor ? ' · ' + esc(r.vendor) : ''}${r.parts ? ' · ' + esc(r.parts) : ''}${n ? ' · 📎 ' + n : ''}${r.projectId ? ' · 🏗️' : ''}</div></div>${recCost(r) ? '<span class="pill">' + money(recCost(r)) + '</span>' : ''}</div>`;
 }
 
 function docRow(d) {
@@ -675,6 +732,7 @@ function runSearch(q) {
   if (tasks.length) h += '<h2>Tasks</h2>' + tasks.map(t => taskRow(t, true)).join('');
   if (recs.length) h += '<h2>History</h2>' + recs.map(recRow).join('');
   if (docs.length) h += '<h2>Documents</h2>' + docs.map(docRow).join('');
+  h += searchExtra(q);
   out.innerHTML = h || '<div class="empty small">No matches.</div>';
 }
 
@@ -698,14 +756,16 @@ function renderSettings() {
     <h2>About</h2><div class="small" id="ver">HomeLogger ${LOCAL ? esc(APP_VERSION) : ''}</div>`;
 }
 
+const ROOTS = ['home', 'docs', 'search', 'settings'];
 function render() {
-  const nav = view.name === 'area' ? 'home' : view.name;
+  const nav = ROOTS.includes(view.name) ? view.name : 'home';
   document.querySelectorAll('#nav button').forEach(b => b.classList.toggle('on', b.dataset.v === nav));
-  $('#back').style.display = view.name === 'area' ? '' : 'none';
-  $('#title').textContent = view.name === 'area' ? (areaOf(view.id) || {}).name || '' : { home: 'HomeLogger', docs: 'Documents', search: 'Search', settings: 'Settings' }[view.name];
+  $('#back').style.display = ROOTS.includes(view.name) ? 'none' : '';
+  $('#title').textContent = view.name === 'area' ? (areaOf(view.id) || {}).name || '' : view.name === 'project' ? (S.projects.find(p => p.id === view.id) || {}).title || 'Project'
+    : { home: 'HomeLogger', docs: 'Documents', search: 'Search', settings: 'Settings', info: 'Home info', projects: 'Projects', report: 'History report' }[view.name];
   const app = $('#app');
   const scroll = window.scrollY;
-  app.innerHTML = { home: renderHome, area: renderArea, docs: renderDocs, search: renderSearch, settings: renderSettings }[view.name]();
+  app.innerHTML = { home: renderHome, area: renderArea, docs: renderDocs, search: renderSearch, settings: renderSettings, info: renderInfo, projects: renderProjects, project: renderProject, report: renderReport }[view.name]();
   if (view.name === 'search') { runSearch(view.q || ''); $('#q').oninput = e => { view.q = e.target.value; runSearch(view.q); }; $('#q').focus(); }
   if (view.name === 'settings') mountSettings();
   window.scrollTo(0, scroll);
@@ -777,7 +837,7 @@ $('#nav').onclick = e => { const b = e.target.closest('button'); if (!b) return;
 
 function recordView(r) {
   const docs = S.documents.filter(d => d.recordId === r.id);
-  sheet(`<h3>${esc(r.title)}</h3><dl class="kv"><dt>Type</dt><dd>${REC_TYPES[r.type] || ''}</dd><dt>Date</dt><dd>${fmt(r.date)}</dd>${r.vendor ? '<dt>Vendor</dt><dd>' + esc(r.vendor) + '</dd>' : ''}${r.parts ? '<dt>Parts</dt><dd>' + esc(r.parts) + '</dd>' : ''}${r.notes ? '<dt>Notes</dt><dd>' + esc(r.notes) + '</dd>' : ''}</dl>
+  sheet(`<h3>${esc(r.title)}</h3><dl class="kv"><dt>Type</dt><dd>${REC_TYPES[r.type] || ''}</dd><dt>Date</dt><dd>${fmt(r.date)}</dd>${recCost(r) ? '<dt>Cost</dt><dd>' + money(recCost(r)) + '</dd>' : ''}${(S.projects.find(p => p.id === r.projectId)) ? '<dt>Project</dt><dd>' + esc(S.projects.find(p => p.id === r.projectId).title) + '</dd>' : ''}${r.vendor ? '<dt>Vendor</dt><dd>' + esc(r.vendor) + '</dd>' : ''}${r.parts ? '<dt>Parts</dt><dd>' + esc(r.parts) + '</dd>' : ''}${r.notes ? '<dt>Notes</dt><dd>' + esc(r.notes) + '</dd>' : ''}</dl>
     <h2>Attachments</h2>${docs.length ? docs.map(docRow).join('') : '<div class="small">None</div>'}
     <div class="actions"><button class="btn sec" id="attach">📎 Attach</button><button class="btn" id="edit">Edit</button></div>`,
   el => {
@@ -794,7 +854,7 @@ function docView(d) {
   sheet(`<h3>${esc(d.title)}</h3>
     ${img ? '<img src="' + fileUrl(d.fileId) + '" style="width:100%;border-radius:12px;margin-bottom:10px">' : ''}
     ${pdf && !LOCAL ? '<iframe src="' + fileUrl(d.fileId) + '" style="width:100%;height:50vh;border:0;border-radius:12px;background:#fff;margin-bottom:10px"></iframe>' : ''}
-    <dl class="kv"><dt>Category</dt><dd>${esc(d.category || '')}</dd>${a ? '<dt>Area</dt><dd>' + esc(a.name) + '</dd>' : ''}${r ? '<dt>Work entry</dt><dd>' + esc(r.title) + '</dd>' : ''}${d.expires ? '<dt>Expires</dt><dd>' + fmt(d.expires) + '</dd>' : ''}<dt>File</dt><dd>${esc(d.fileName || '')}</dd>${d.notes ? '<dt>Notes</dt><dd>' + esc(d.notes) + '</dd>' : ''}</dl>
+    <dl class="kv"><dt>Category</dt><dd>${esc(d.category || '')}</dd>${a ? '<dt>Area</dt><dd>' + esc(a.name) + '</dd>' : ''}${r ? '<dt>Work entry</dt><dd>' + esc(r.title) + '</dd>' : ''}${(S.projects.find(x => x.id === d.projectId)) ? '<dt>Project</dt><dd>' + esc(S.projects.find(x => x.id === d.projectId).title) + '</dd>' : ''}${(S.facts.find(x => x.id === d.factId)) ? '<dt>Home info</dt><dd>' + esc(S.facts.find(x => x.id === d.factId).title) + '</dd>' : ''}${d.expires ? '<dt>Expires</dt><dd>' + fmt(d.expires) + '</dd>' : ''}<dt>File</dt><dd>${esc(d.fileName || '')}</dd>${d.notes ? '<dt>Notes</dt><dd>' + esc(d.notes) + '</dd>' : ''}</dl>
     <div class="actions"><a class="btn sec" href="${fileUrl(d.fileId, true)}" download>Download</a><a class="btn sec" href="${fileUrl(d.fileId)}" target="_blank" rel="noopener">Open</a><button class="btn" id="edit">Edit</button></div>`,
   el => { el.querySelector('#edit').onclick = () => { el.close(); docForm(d.areaId, d); }; });
 }

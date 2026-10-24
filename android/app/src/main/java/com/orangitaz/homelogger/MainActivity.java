@@ -3,11 +3,16 @@ package com.orangitaz.homelogger;
 import android.app.Activity;
 import android.content.ContentResolver;
 import android.content.ContentValues;
+import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
 import android.net.Uri;
 import android.os.Bundle;
+import android.print.PrintAttributes;
+import android.print.PrintManager;
 import android.provider.MediaStore;
 import android.util.Base64;
 import android.webkit.JavascriptInterface;
@@ -21,10 +26,18 @@ import android.webkit.WebViewClient;
 import android.widget.Toast;
 
 import androidx.core.content.FileProvider;
+import com.google.android.gms.tasks.OnFailureListener;
+import com.google.android.gms.tasks.OnSuccessListener;
+import com.google.mlkit.vision.common.InputImage;
+import com.google.mlkit.vision.text.Text;
+import com.google.mlkit.vision.text.TextRecognition;
+import com.google.mlkit.vision.text.TextRecognizer;
+import com.google.mlkit.vision.text.latin.TextRecognizerOptions;
 import androidx.webkit.WebViewAssetLoader;
 
 import org.json.JSONObject;
 
+import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
@@ -398,6 +411,88 @@ public class MainActivity extends Activity {
                 j.body.delete();
             if (j.resp != null) //noinspection ResultOfMethodCallIgnored
                 j.resp.delete();
+        }
+
+        // ---- Print / save as PDF (used by the history report) ----
+        @JavascriptInterface
+        public void printPage(final String jobName) {
+            runOnUiThread(new Runnable() {
+                @Override
+                public void run() {
+                    try {
+                        PrintManager pm = (PrintManager) getSystemService(Context.PRINT_SERVICE);
+                        pm.print(jobName, web.createPrintDocumentAdapter(jobName), new PrintAttributes.Builder().build());
+                    } catch (Exception e) {
+                        Toast.makeText(MainActivity.this, "Could not open the print dialog", Toast.LENGTH_LONG).show();
+                    }
+                }
+            });
+        }
+
+        // ---- Receipt text recognition, on the phone (ML Kit). The web page sends the photo, gets the text back. ----
+        private final Map<String, ByteArrayOutputStream> ocrBufs = new ConcurrentHashMap<>();
+
+        @JavascriptInterface
+        public void ocrBegin(String id) {
+            ocrBufs.put(id, new ByteArrayOutputStream());
+        }
+
+        @JavascriptInterface
+        public void ocrBody(String id, String b64) {
+            ByteArrayOutputStream b = ocrBufs.get(id);
+            if (b == null) return;
+            byte[] d = Base64.decode(b64, Base64.DEFAULT);
+            b.write(d, 0, d.length);
+        }
+
+        @JavascriptInterface
+        public void ocrRun(final String id) {
+            ByteArrayOutputStream b = ocrBufs.remove(id);
+            if (b == null) {
+                ocrDone(id, "", "no image");
+                return;
+            }
+            try {
+                byte[] bytes = b.toByteArray();
+                BitmapFactory.Options o = new BitmapFactory.Options();
+                o.inJustDecodeBounds = true;
+                BitmapFactory.decodeByteArray(bytes, 0, bytes.length, o);
+                int sample = 1;
+                while (Math.max(o.outWidth, o.outHeight) / sample > 2600) sample *= 2;
+                o.inJustDecodeBounds = false;
+                o.inSampleSize = sample;
+                Bitmap bmp = BitmapFactory.decodeByteArray(bytes, 0, bytes.length, o);
+                if (bmp == null) {
+                    ocrDone(id, "", "unreadable image");
+                    return;
+                }
+                TextRecognizer rec = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS);
+                rec.process(InputImage.fromBitmap(bmp, 0))
+                        .addOnSuccessListener(new OnSuccessListener<Text>() {
+                            @Override
+                            public void onSuccess(Text text) {
+                                ocrDone(id, text.getText(), "");
+                            }
+                        })
+                        .addOnFailureListener(new OnFailureListener() {
+                            @Override
+                            public void onFailure(Exception e) {
+                                ocrDone(id, "", String.valueOf(e.getMessage()));
+                            }
+                        });
+            } catch (Exception e) {
+                ocrDone(id, "", String.valueOf(e.getMessage()));
+            }
+        }
+
+        private void ocrDone(String id, String text, String err) {
+            final String js = "window.__ocrDone(" + JSONObject.quote(id) + "," + JSONObject.quote(text) + "," + JSONObject.quote(err) + ")";
+            runOnUiThread(new Runnable() {
+                @Override
+                public void run() {
+                    web.evaluateJavascript(js, null);
+                }
+            });
         }
 
         private void write(byte[] bytes) {

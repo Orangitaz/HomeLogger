@@ -7,6 +7,8 @@ Self-hosted home maintenance, upgrades and document storage. Runs on TrueNAS (cu
 - Recurring maintenance tasks; marking done rolls the next date forward and logs history
 - Log maintenance, repairs and upgrades with vendor, parts, notes and attached receipts/photos
 - Document library (deed, insurance, permits, inspections, manuals) with categories and expiry reminders
+- Home info page (shutoff locations with photos, paint colors, sizes, contacts), suggested starter tasks, upgrade projects with checklist/budget/photos, optional costs, printable history report
+- Android app: read receipts from a photo (on the phone), print/save the report as PDF
 - Search across everything, backup/restore, 14 automatic daily backups, optional webhook alerts
 
 ## Run

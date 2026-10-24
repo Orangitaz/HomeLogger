@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.3.0
+- Home info: a page for the things you need in a hurry. Where the water, gas and power shut off (with photos), paint colors, filter sizes and other specs, who to call, and codes. Reached from the Home screen.
+- Suggested tasks: in an area's Tasks tab, tick the common jobs for that kind of area (filters, gutters, water heater flush, smoke alarms…). Nothing is added until you tick it.
+- Projects: bigger jobs with a status, step checklist, budget, before / progress / after photos, receipts, and the work and costs logged against them.
+- Costs: optional cost on every work entry; spending shown per area and for the whole home (this year / all time) and per project against its budget.
+- Receipt reading (Android app): after choosing a receipt photo, tap "Read receipt from the photo" to fill in the vendor, date and total on the phone itself (nothing is uploaded).
+- History report: a printable report of the whole home or one area (areas, maintenance schedule, work history, projects, documents, optional photos and costs). Print or save as PDF. Codes are left out.
+- Sync, backup, search and the server all understand the new data. Update the TrueNAS image and the app together so sync keeps new items.
+
 ## 1.2.0
 - Sync with TrueNAS: the Android app can sync with your HomeLogger server (Settings → Sync with TrueNAS). Changes on either side are merged, the newest edit to an item wins, deletes carry over, and documents/photos transfer both ways. Syncs on open and shortly after each change. The server keeps a change log so phone clock differences don't matter.
 - Server: new sync endpoint, deletion tracking, uploads with a chosen file id. Update the TrueNAS image to 1.2.0 before turning on sync.
