@@ -240,10 +240,21 @@ function renderProject() {
 const OCR = () => LOCAL && typeof AndroidBridge.ocrBegin === 'function';
 const ocrWaiters = {};
 window.__ocrDone = (id, text, err) => { const w = ocrWaiters[id]; if (w) { delete ocrWaiters[id]; w({ text, err }); } };
+// Straighten (camera photos carry a rotation flag) and shrink the photo before sending it for reading.
+async function prepImage(file) {
+  try {
+    const bmp = await createImageBitmap(file, { imageOrientation: 'from-image' });
+    const k = Math.min(1, 2000 / Math.max(bmp.width, bmp.height));
+    const c = document.createElement('canvas'); c.width = Math.round(bmp.width * k); c.height = Math.round(bmp.height * k);
+    c.getContext('2d').drawImage(bmp, 0, 0, c.width, c.height);
+    return (await new Promise(r => c.toBlob(r, 'image/jpeg', 0.9))) || file;
+  } catch (e) { return file; }
+}
 async function ocrImage(file) {
   const id = rid() + rid();
+  const img = await prepImage(file);
   AndroidBridge.ocrBegin(id);
-  await eachB64(file, c => AndroidBridge.ocrBody(id, c));
+  await eachB64(img, c => AndroidBridge.ocrBody(id, c));
   const done = new Promise(res => { ocrWaiters[id] = res; });
   AndroidBridge.ocrRun(id);
   const { text, err } = await done;
