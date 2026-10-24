@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.3.1
+- The in-app Download update button now downloads the versioned file (for example homelogger-1_3_1.apk) so you can see which version you have. The unversioned homelogger.apk stays on each release so apps older than 1.3.1 can still update.
+
 ## 1.3.0
 - Home info: a page for the things you need in a hurry. Where the water, gas and power shut off (with photos), paint colors, filter sizes and other specs, who to call, and codes. Reached from the Home screen.
 - Suggested tasks: in an area's Tasks tab, tick the common jobs for that kind of area (filters, gutters, water heater flush, smoke alarms…). Nothing is added until you tick it.
