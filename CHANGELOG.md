@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.3.2
+- Removed the search button at the top of every screen; search is the 🔍 tab in the bottom bar.
+
 ## 1.3.1
 - The in-app Download update button now downloads the versioned file (for example homelogger-1_3_1.apk) so you can see which version you have. The unversioned homelogger.apk stays on each release so apps older than 1.3.1 can still update.
 
