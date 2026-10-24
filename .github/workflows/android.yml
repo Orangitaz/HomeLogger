@@ -44,8 +44,7 @@ jobs:
           PY
       - name: Name the APK
         run: |
-          cp android/app/build/outputs/apk/release/app-release.apk homelogger.apk
-          cp homelogger.apk "homelogger-${VER//./_}.apk"
+          cp android/app/build/outputs/apk/release/app-release.apk "homelogger-${VER//./_}.apk"
       - uses: actions/upload-artifact@v4
         with:
           name: homelogger-apk
@@ -55,7 +54,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          FILES="homelogger.apk homelogger-${VER//./_}.apk"
+          FILES="homelogger-${VER//./_}.apk"
           if gh release view "v$VER" >/dev/null 2>&1; then
             gh release upload "v$VER" $FILES --clobber
           else
