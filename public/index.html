@@ -398,13 +398,18 @@ async function localRestore(file) {
   const c = syncCfg(); if (c) setSyncCfg(Object.assign(c, { since: 0, lastPush: '' }));
   await lsave();
 }
-let UPDATE = null;
+let UPDATE = null, UPDATE_URL = '', UPDATE_FILE = '';
 async function checkUpdate() {
   if (!LOCAL || APP_VERSION === 'dev') return;
   try {
     const r = await fetch('https://api.github.com/repos/' + GH_REPO + '/releases/latest', { headers: { Accept: 'application/vnd.github+json' } });
     if (!r.ok) return;
-    const v = String((await r.json()).tag_name || '').replace(/^v/, '');
+    const rel = await r.json();
+    const v = String(rel.tag_name || '').replace(/^v/, '');
+    // Download the versioned file (homelogger-1_3_1.apk), so you can tell which version you have.
+    const asset = (rel.assets || []).find(a => /^homelogger-.+\.apk$/.test(a.name));
+    UPDATE_URL = asset ? asset.browser_download_url : 'https://github.com/' + GH_REPO + '/releases/latest/download/homelogger.apk';
+    UPDATE_FILE = asset ? asset.name : 'homelogger.apk';
     const n = x => x.split('.').map(y => parseInt(y, 10) || 0), x = n(v), y = n(APP_VERSION);
     for (let i = 0; i < 3; i++) { if (x[i] > y[i]) { UPDATE = v; break; } if (x[i] < y[i]) break; }
     document.querySelector('#nav button[data-v=settings]').classList.toggle('upd', !!UPDATE);
@@ -738,7 +743,7 @@ function runSearch(q) {
 
 function renderSettings() {
   const upd = !LOCAL ? '' : UPDATE
-    ? `<h2>App updates</h2><div class="banner"><b>Version ${esc(UPDATE)} is available</b><p class="small" style="margin:6px 0 10px">Install it over the current app. Your data stays on the phone.</p><a class="btn" href="https://github.com/${GH_REPO}/releases/latest/download/homelogger.apk">Download update</a></div>`
+    ? `<h2>App updates</h2><div class="banner"><b>Version ${esc(UPDATE)} is available</b><p class="small" style="margin:6px 0 10px">Install it over the current app. Your data stays on the phone.</p><a class="btn" href="${esc(UPDATE_URL)}">Download update</a><div class="small" style="margin-top:6px">${esc(UPDATE_FILE)}</div></div>`
     : '';
   const backup = LOCAL
     ? `<h2>Backup</h2><div class="card"><p class="small" style="margin-top:0">Your data is stored on this phone only. Save a backup to your Downloads folder now and then (it includes all your documents and photos), so you can restore it after changing phones or reinstalling.</p>
