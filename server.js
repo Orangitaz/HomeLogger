@@ -16,7 +16,7 @@ const BACKUPS = path.join(DATA, 'backups');
 fs.mkdirSync(FILES, { recursive: true });
 fs.mkdirSync(BACKUPS, { recursive: true });
 
-const EMPTY = { areas: [], tasks: [], records: [], documents: [], deleted: [], settings: { webhook: '' } };
+const EMPTY = { areas: [], tasks: [], records: [], documents: [], facts: [], projects: [], deleted: [], settings: { webhook: '' } };
 const fresh = () => JSON.parse(JSON.stringify(EMPTY));
 let db = fresh();
 try { db = Object.assign(fresh(), JSON.parse(fs.readFileSync(DB_FILE, 'utf8'))); } catch { db = fresh(); }
@@ -40,7 +40,7 @@ const now = () => new Date().toISOString();
 let lastS = 0;
 const tick = () => (lastS = Math.max(Date.now(), lastS + 1));
 const ts = x => x.updatedAt || x.createdAt || '';
-const COLS = ['areas', 'tasks', 'records', 'documents'];
+const COLS = ['areas', 'tasks', 'records', 'documents', 'facts', 'projects'];
 const HEX = /^[a-f0-9]{1,64}$/;
 function stamp(item) { item._s = tick(); return item; }
 function bury(col, item, at) {
@@ -71,8 +71,12 @@ function cors(req, res) {
 const COLLECTIONS = {
   areas: ['name', 'icon', 'color', 'notes', 'coverId', 'details', 'order'],
   tasks: ['areaId', 'title', 'intervalMonths', 'nextDue', 'lastDone', 'notes'],
-  records: ['areaId', 'type', 'date', 'title', 'vendor', 'notes', 'parts'],
-  documents: ['areaId', 'recordId', 'category', 'title', 'notes', 'expires', 'fileId', 'fileName', 'mime', 'size'],
+  records: ['areaId', 'projectId', 'type', 'date', 'title', 'vendor', 'notes', 'parts', 'cost'],
+  documents: ['areaId', 'recordId', 'projectId', 'factId', 'category', 'title', 'notes', 'expires', 'fileId', 'fileName', 'mime', 'size'],
+  // Home info: shutoff locations, paint colors, sizes, contacts... (photos are documents with factId)
+  facts: ['category', 'title', 'value', 'notes'],
+  // Upgrade projects with status, checklist and budget (before/after photos are documents with projectId)
+  projects: ['areaId', 'title', 'status', 'notes', 'startDate', 'endDate', 'budget', 'checklist'],
 };
 
 function pick(body, keys) {
@@ -113,14 +117,38 @@ function removeFile(fileId) {
 function deleteDoc(d) { removeFile(d.fileId); }
 const fileExists = fid => HEX.test(fid || '') && fs.existsSync(path.join(FILES, fid));
 
-// Remove tasks/records/documents whose parent area/record no longer exists (after a sync merge).
+// Remove items whose parent (area, work entry, project, home-info item) no longer exists, e.g. after a sync merge.
 function dropOrphans() {
-  const areaIds = new Set(db.areas.map(a => a.id)), recIds = new Set(db.records.map(r => r.id));
+  const ids = c => new Set(db[c].map(x => x.id));
   const keep = (col, bad) => { db[col] = db[col].filter(x => { if (!bad(x)) return true; bury(col, x); if (col === 'documents') deleteDoc(x); return false; }); };
+  const areaIds = ids('areas');
   keep('tasks', t => t.areaId && !areaIds.has(t.areaId));
   keep('records', r => r.areaId && !areaIds.has(r.areaId));
-  const recIds2 = new Set(db.records.map(r => r.id));
-  keep('documents', d => (d.areaId && !areaIds.has(d.areaId)) || (d.recordId && !recIds2.has(d.recordId)));
+  keep('projects', p => p.areaId && !areaIds.has(p.areaId));
+  const rec = ids('records'), pro = ids('projects'), fac = ids('facts');
+  keep('documents', d => (d.areaId && !areaIds.has(d.areaId)) || (d.recordId && !rec.has(d.recordId)) || (d.projectId && !pro.has(d.projectId)) || (d.factId && !fac.has(d.factId)));
+}
+
+// Deleting something also deletes what hangs off it (and its files). Every removal leaves a tombstone for sync.
+function cascade(col, item) {
+  const drop = (c, pred) => {
+    const gone = db[c].filter(pred);
+    db[c] = db[c].filter(x => !gone.includes(x));
+    gone.forEach(x => { bury(c, x); if (c === 'documents') deleteDoc(x); });
+    return new Set(gone.map(x => x.id));
+  };
+  if (col === 'areas') {
+    drop('tasks', t => t.areaId === item.id);
+    const recs = drop('records', r => r.areaId === item.id);
+    const projs = drop('projects', p => p.areaId === item.id);
+    drop('documents', d => d.areaId === item.id || recs.has(d.recordId) || projs.has(d.projectId));
+    if (item.coverId) removeFile(item.coverId);
+  } else if (col === 'records') drop('documents', d => d.recordId === item.id);
+  else if (col === 'facts') drop('documents', d => d.factId === item.id);
+  else if (col === 'projects') {
+    drop('documents', d => d.projectId === item.id);
+    for (const r of db.records) if (r.projectId === item.id) { r.projectId = ''; r.updatedAt = now(); stamp(r); } // keep the work entries, just unlink
+  }
 }
 
 // Merge a push from a phone; returns the file ids the server still needs.
@@ -325,20 +353,7 @@ const server = http.createServer(async (req, res) => {
         const idx = list.indexOf(item);
         list.splice(idx, 1);
         bury(a, item);
-        if (a === 'areas') {
-          db.tasks = db.tasks.filter(t => { if (t.areaId === item.id) bury('tasks', t); return t.areaId !== item.id; });
-          const rec = db.records.filter(r => r.areaId === item.id).map(r => r.id);
-          db.records = db.records.filter(r => { if (r.areaId === item.id) bury('records', r); return r.areaId !== item.id; });
-          db.documents = db.documents.filter(d => {
-            const gone = d.areaId === item.id || rec.includes(d.recordId);
-            if (gone) { deleteDoc(d); bury('documents', d); }
-            return !gone;
-          });
-          if (item.coverId) removeFile(item.coverId);
-        }
-        if (a === 'records') {
-          db.documents = db.documents.filter(d => { const gone = d.recordId === item.id; if (gone) { deleteDoc(d); bury('documents', d); } return !gone; });
-        }
+        cascade(a, item);
         if (a === 'documents') deleteDoc(item);
         save();
         return send(res, 200, { ok: true });
