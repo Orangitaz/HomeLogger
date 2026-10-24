@@ -98,7 +98,6 @@ label.pick input{width:auto;padding:0;border:0;background:none;margin-top:3px;fl
 <header>
   <button class="ib" id="back" style="display:none" aria-label="Back">‹</button>
   <h1 id="title">HomeLogger</h1>
-  <button class="ib" id="hsearch" aria-label="Search">🔍</button>
 </header>
 <main id="app"></main>
 <nav class="bot" id="nav">
@@ -837,7 +836,6 @@ document.addEventListener('click', async e => {
   }
 });
 $('#back').onclick = () => { view = stack.pop() || { name: 'home' }; render(); };
-$('#hsearch').onclick = () => { stack.length = 0; view = { name: 'search' }; render(); };
 $('#nav').onclick = e => { const b = e.target.closest('button'); if (!b) return; stack.length = 0; view = { name: b.dataset.v }; render(); };
 
 function recordView(r) {
