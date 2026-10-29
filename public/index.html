@@ -108,6 +108,7 @@ label.pick input{width:auto;padding:0;border:0;background:none;margin-top:3px;fl
 </nav>
 
 <script src="features.js"></script>
+<script src="features2.js"></script>
 <script>
 'use strict';
 const LOCAL = !!window.AndroidBridge; // true inside the Android app: data lives on the phone
@@ -115,7 +116,7 @@ let APP_VERSION = 'dev';
 const GH_REPO = 'Orangitaz/HomeLogger';
 const $ = s => document.querySelector(s);
 const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-let S = { areas: [], tasks: [], records: [], documents: [], facts: [], projects: [], settings: {} };
+let S = { areas: [], tasks: [], records: [], documents: [], facts: [], projects: [], appliances: [], belongings: [], checks: [], settings: {} };
 let view = { name: 'home' };
 const stack = [];
 
@@ -155,12 +156,15 @@ const LKEYS = {
   areas: ['name', 'icon', 'color', 'notes', 'coverId', 'details', 'order'],
   tasks: ['areaId', 'title', 'intervalMonths', 'nextDue', 'lastDone', 'notes'],
   records: ['areaId', 'projectId', 'type', 'date', 'title', 'vendor', 'notes', 'parts', 'cost'],
-  documents: ['areaId', 'recordId', 'projectId', 'factId', 'category', 'title', 'notes', 'expires', 'fileId', 'fileName', 'mime', 'size'],
+  documents: ['areaId', 'recordId', 'projectId', 'factId', 'applianceId', 'belongingId', 'category', 'title', 'notes', 'expires', 'fileId', 'fileName', 'mime', 'size'],
   facts: ['category', 'title', 'value', 'notes'],
   projects: ['areaId', 'title', 'status', 'notes', 'startDate', 'endDate', 'budget', 'checklist'],
+  appliances: ['areaId', 'name', 'brand', 'model', 'serial', 'purchaseDate', 'warrantyEnd', 'price', 'store', 'notes'],
+  belongings: ['room', 'name', 'qty', 'value', 'purchaseDate', 'serial', 'notes'],
+  checks: ['key', 'done'],
 };
-const EMPTY_DB = () => ({ areas: [], tasks: [], records: [], documents: [], facts: [], projects: [], deleted: [], settings: { webhook: '' } });
-const COLS = ['areas', 'tasks', 'records', 'documents', 'facts', 'projects'];
+const EMPTY_DB = () => ({ areas: [], tasks: [], records: [], documents: [], facts: [], projects: [], appliances: [], belongings: [], checks: [], deleted: [], settings: { webhook: '' } });
+const COLS = ['areas', 'tasks', 'records', 'documents', 'facts', 'projects', 'appliances', 'belongings', 'checks'];
 function addMonths(dateStr, m) {
   const d = new Date(dateStr + 'T12:00:00'); const day = d.getDate();
   d.setMonth(d.getMonth() + m); if (d.getDate() !== day) d.setDate(0);
@@ -212,7 +216,10 @@ async function localApi(method, url, body, raw) {
         const projs = drop('projects', p => p.areaId === item.id);
         drop('documents', d => d.areaId === item.id || recs.has(d.recordId) || projs.has(d.projectId));
         if (item.coverId) await idb.del('files', item.coverId);
-      } else if (a === 'records') drop('documents', d => d.recordId === item.id);
+        for (const x of LDB.appliances) if (x.areaId === item.id) { x.areaId = ''; x.updatedAt = now(); } // keep the appliance, just unlink
+      } else if (a === 'appliances') drop('documents', d => d.applianceId === item.id);
+      else if (a === 'belongings') drop('documents', d => d.belongingId === item.id);
+      else if (a === 'records') drop('documents', d => d.recordId === item.id);
       else if (a === 'facts') drop('documents', d => d.factId === item.id);
       else if (a === 'projects') {
         drop('documents', d => d.projectId === item.id);
@@ -296,8 +303,10 @@ function applyPull(res, gone) {
   // Drop anything whose area, work entry, project or home-info item no longer exists.
   const areaIds = new Set(LDB.areas.map(a => a.id));
   for (const col of ['tasks', 'records', 'projects']) LDB[col] = LDB[col].filter(x => { const ok = !x.areaId || areaIds.has(x.areaId); if (!ok) changed = true; return ok; });
+  for (const x of LDB.appliances) if (x.areaId && !areaIds.has(x.areaId)) { x.areaId = ''; x.updatedAt = new Date().toISOString(); changed = true; }
+  const appIds = new Set(LDB.appliances.map(r => r.id)), belIds = new Set(LDB.belongings.map(r => r.id));
   const recIds = new Set(LDB.records.map(r => r.id)), proIds = new Set(LDB.projects.map(r => r.id)), facIds = new Set(LDB.facts.map(r => r.id));
-  LDB.documents = LDB.documents.filter(d => { const ok = (!d.areaId || areaIds.has(d.areaId)) && (!d.recordId || recIds.has(d.recordId)) && (!d.projectId || proIds.has(d.projectId)) && (!d.factId || facIds.has(d.factId)); if (!ok) { dropFile('documents', d); changed = true; } return ok; });
+  LDB.documents = LDB.documents.filter(d => { const ok = (!d.areaId || areaIds.has(d.areaId)) && (!d.recordId || recIds.has(d.recordId)) && (!d.projectId || proIds.has(d.projectId)) && (!d.factId || facIds.has(d.factId)) && (!d.applianceId || appIds.has(d.applianceId)) && (!d.belongingId || belIds.has(d.belongingId)); if (!ok) { dropFile('documents', d); changed = true; } return ok; });
   const cutoff = new Date(Date.now() - 365 * 864e5).toISOString();
   LDB.deleted = LDB.deleted.filter(t => t.at > cutoff);
   return changed;
@@ -622,6 +631,7 @@ function attention() {
   const items = [];
   for (const t of S.tasks) { if (!t.nextDue) continue; const n = days(t.nextDue); if (n <= 14) items.push({ kind: 'task', n, t, area: areaOf(t.areaId) }); }
   for (const d of S.documents) { if (!d.expires) continue; const n = days(d.expires); if (n <= 45) items.push({ kind: 'doc', n, d, area: areaOf(d.areaId) }); }
+  for (const x of S.appliances || []) { if (!x.warrantyEnd) continue; const n = days(x.warrantyEnd); if (n >= 0 && n <= 45) items.push({ kind: 'warranty', n, x }); }
   return items.sort((a, b) => a.n - b.n);
 }
 
@@ -634,12 +644,13 @@ function taskRow(t, showArea) {
 
 function renderHome() {
   const att = attention();
-  let h = `<div class="quick"><button data-go="info"><span>🆘</span>Home info</button><button data-go="projects"><span>🏗️</span>Projects</button><button data-go="report"><span>📄</span>Report</button></div>`;
+  let h = `<div class="quick"><button data-go="info"><span>🆘</span>Home info</button><button data-go="projects"><span>🏗️</span>Projects</button><button data-go="appliances"><span>🔌</span>Appliances</button><button data-go="belongings"><span>🛋️</span>Belongings</button><button data-go="report"><span>📄</span>Report</button></div>`;
+  h += seasonCard();
   const hsp = spend(S.records); if (hsp.all) h += `<div class="small" style="margin:2px 2px 8px">Spent this year ${money(hsp.yr)} · all time ${money(hsp.all)}</div>`;
   const overdue = att.filter(x => x.n < 0);
   if (att.length) {
     h += `<div class="banner ${overdue.length ? 'bad' : ''}"><b>${overdue.length ? overdue.length + ' overdue · ' : ''}${att.length} need attention</b></div>`;
-    h += att.slice(0, 8).map(x => x.kind === 'task' ? taskRow(x.t, true) :
+    h += att.slice(0, 8).map(x => x.kind === 'task' ? taskRow(x.t, true) : x.kind === 'warranty' ? `<div class="row" data-appl="${x.x.id}"><div class="thumb">🔌</div><div class="grow"><div class="t">${esc(x.x.name)}</div><div class="s">Warranty ends ${fmt(x.x.warrantyEnd)}</div></div><span class="pill warn">${x.n}d left</span></div>` :
       `<div class="row" data-doc="${x.d.id}"><div class="thumb">📄</div><div class="grow"><div class="t">${esc(x.d.title)}</div><div class="s">${esc(x.d.category || '')} · expires ${fmt(x.d.expires)}</div></div><span class="pill ${x.n < 0 ? 'bad' : 'warn'}">${x.n < 0 ? 'Expired' : x.n + 'd left'}</span></div>`).join('');
     if (att.length > 8) h += `<div class="small" style="margin:4px 0 12px">+ ${att.length - 8} more</div>`;
   }
@@ -766,10 +777,10 @@ function render() {
   document.querySelectorAll('#nav button').forEach(b => b.classList.toggle('on', b.dataset.v === nav));
   $('#back').style.display = ROOTS.includes(view.name) ? 'none' : '';
   $('#title').textContent = view.name === 'area' ? (areaOf(view.id) || {}).name || '' : view.name === 'project' ? (S.projects.find(p => p.id === view.id) || {}).title || 'Project'
-    : { home: 'HomeLogger', docs: 'Documents', search: 'Search', settings: 'Settings', info: 'Home info', projects: 'Projects', report: 'History report' }[view.name];
+    : { home: 'HomeLogger', docs: 'Documents', search: 'Search', settings: 'Settings', info: 'Home info', projects: 'Projects', report: 'History report', appliances: 'Appliances', warranties: 'Warranties', belongings: 'Belongings', season: 'This season' }[view.name];
   const app = $('#app');
   const scroll = window.scrollY;
-  app.innerHTML = { home: renderHome, area: renderArea, docs: renderDocs, search: renderSearch, settings: renderSettings, info: renderInfo, projects: renderProjects, project: renderProject, report: renderReport }[view.name]();
+  app.innerHTML = { home: renderHome, area: renderArea, docs: renderDocs, search: renderSearch, settings: renderSettings, info: renderInfo, projects: renderProjects, project: renderProject, report: renderReport, appliances: renderAppliances, warranties: renderWarranties, belongings: renderBelongings, season: renderSeason }[view.name]();
   if (view.name === 'search') { runSearch(view.q || ''); $('#q').oninput = e => { view.q = e.target.value; runSearch(view.q); }; $('#q').focus(); }
   if (view.name === 'settings') mountSettings();
   window.scrollTo(0, scroll);
@@ -857,7 +868,7 @@ function docView(d) {
   sheet(`<h3>${esc(d.title)}</h3>
     ${img ? '<img src="' + fileUrl(d.fileId) + '" style="width:100%;border-radius:12px;margin-bottom:10px">' : ''}
     ${pdf && !LOCAL ? '<iframe src="' + fileUrl(d.fileId) + '" style="width:100%;height:50vh;border:0;border-radius:12px;background:#fff;margin-bottom:10px"></iframe>' : ''}
-    <dl class="kv"><dt>Category</dt><dd>${esc(d.category || '')}</dd>${a ? '<dt>Area</dt><dd>' + esc(a.name) + '</dd>' : ''}${r ? '<dt>Work entry</dt><dd>' + esc(r.title) + '</dd>' : ''}${(S.projects.find(x => x.id === d.projectId)) ? '<dt>Project</dt><dd>' + esc(S.projects.find(x => x.id === d.projectId).title) + '</dd>' : ''}${(S.facts.find(x => x.id === d.factId)) ? '<dt>Home info</dt><dd>' + esc(S.facts.find(x => x.id === d.factId).title) + '</dd>' : ''}${d.expires ? '<dt>Expires</dt><dd>' + fmt(d.expires) + '</dd>' : ''}<dt>File</dt><dd>${esc(d.fileName || '')}</dd>${d.notes ? '<dt>Notes</dt><dd>' + esc(d.notes) + '</dd>' : ''}</dl>
+    <dl class="kv"><dt>Category</dt><dd>${esc(d.category || '')}</dd>${a ? '<dt>Area</dt><dd>' + esc(a.name) + '</dd>' : ''}${r ? '<dt>Work entry</dt><dd>' + esc(r.title) + '</dd>' : ''}${(S.projects.find(x => x.id === d.projectId)) ? '<dt>Project</dt><dd>' + esc(S.projects.find(x => x.id === d.projectId).title) + '</dd>' : ''}${(S.facts.find(x => x.id === d.factId)) ? '<dt>Home info</dt><dd>' + esc(S.facts.find(x => x.id === d.factId).title) + '</dd>' : ''}${(S.appliances.find(x => x.id === d.applianceId)) ? '<dt>Appliance</dt><dd>' + esc(S.appliances.find(x => x.id === d.applianceId).name) + '</dd>' : ''}${(S.belongings.find(x => x.id === d.belongingId)) ? '<dt>Belonging</dt><dd>' + esc(S.belongings.find(x => x.id === d.belongingId).name) + '</dd>' : ''}${d.expires ? '<dt>Expires</dt><dd>' + fmt(d.expires) + '</dd>' : ''}<dt>File</dt><dd>${esc(d.fileName || '')}</dd>${d.notes ? '<dt>Notes</dt><dd>' + esc(d.notes) + '</dd>' : ''}</dl>
     <div class="actions"><a class="btn sec" href="${fileUrl(d.fileId, true)}" download>Download</a><a class="btn sec" href="${fileUrl(d.fileId)}" target="_blank" rel="noopener">Open</a><button class="btn" id="edit">Edit</button></div>`,
   el => { el.querySelector('#edit').onclick = () => { el.close(); docForm(d.areaId, d); }; });
 }

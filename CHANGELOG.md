@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.4.0
+- Appliances: a register of your appliances and systems with brand, model, serial number, purchase date, warranty end, price, where you bought it, and photos (nameplate, manual, receipt). In the Android app, "Read model & serial from the photo" fills them in from a nameplate photo on the phone itself (nothing is uploaded).
+- Warranties: one screen listing what is covered, what ends within 90 days, and what has expired, including any documents you gave an expiry date. Warranties ending within 45 days show on the Home screen, and the server's daily webhook alert includes them.
+- This season: a card on the Home screen with jobs that suit the time of year (gutters and winterizing irrigation in fall, AC service in spring, and so on). Tick them off right there; ticks reset each year and sync between devices. Tap the card for all four seasons.
+- Belongings: a room-by-room inventory of what you own, with photos, quantity and optional value, with totals per room and overall. Export it as a spreadsheet (CSV) or add it to the history report for insurance.
+- The history report now lists appliances and can include the belongings inventory. Search, backup, restore and sync all cover the new data. Update the TrueNAS image and the app together so sync keeps the new items.
+
 ## 1.3.2
 - Removed the search button at the top of every screen; search is the 🔍 tab in the bottom bar.
 

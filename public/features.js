@@ -317,7 +317,7 @@ function wireScan(el, fill) {
 
 // ---------- History report (print / save as PDF) ----------
 function renderReport() {
-  const o = view.rep = Object.assign({ area: '', photos: true, costs: true }, view.rep);
+  const o = view.rep = Object.assign({ area: '', photos: true, costs: true, inv: false }, view.rep);
   const areas = o.area ? S.areas.filter(a => a.id === o.area) : S.areas.slice().sort((a, b) => (a.order ?? 1e9) - (b.order ?? 1e9));
   const inScope = r => !o.area || r.areaId === o.area;
   const recs = S.records.filter(inScope);
@@ -331,7 +331,7 @@ function renderReport() {
   }).join('');
   const th = o.costs ? '<th>Date</th><th>Type</th><th>Work</th><th class="r">Cost</th>' : '<th>Date</th><th>Type</th><th>Work</th>';
   let h = `<div class="noprint"><div class="card"><label style="margin-top:0">Report for</label><select id="repArea"><option value="">The whole home</option>${S.areas.map(a => `<option value="${a.id}"${o.area === a.id ? ' selected' : ''}>${esc(a.icon + ' ' + a.name)}</option>`).join('')}</select>
-    <label class="pick"><input type="checkbox" id="repPh" ${o.photos ? 'checked' : ''}><span>Include photos</span></label><label class="pick"><input type="checkbox" id="repCost" ${o.costs ? 'checked' : ''}><span>Include costs</span></label>
+    <label class="pick"><input type="checkbox" id="repPh" ${o.photos ? 'checked' : ''}><span>Include photos</span></label><label class="pick"><input type="checkbox" id="repCost" ${o.costs ? 'checked' : ''}><span>Include costs and values</span></label><label class="pick"><input type="checkbox" id="repInv" ${o.inv ? 'checked' : ''}><span>Include belongings inventory</span></label>
     <div class="actions"><button class="btn" id="printRep">🖨️ Print / Save as PDF</button></div></div></div>`;
   h += `<div class="rep"><h1>Home maintenance report</h1><div class="small">${o.area ? esc((areaOf(o.area) || {}).name || '') + ' · ' : ''}Prepared ${fmt(today())}</div>
     <div class="two" style="margin:10px 0"><div><b>${areas.length}</b> ${areas.length === 1 ? 'area' : 'areas'}</div><div><b>${recs.length}</b> work entries</div>${o.costs && sp.all ? `<div><b>${money(sp.all)}</b> spent</div>` : ''}</div>`;
@@ -359,6 +359,9 @@ function renderReport() {
         ${pr.length ? `<table><tr>${th}</tr>${recRows(pr)}</table>` : ''}${imgs.length ? '<div class="rimgs">' + imgs.map(d => `<img src="${fileUrl(d.fileId)}">`).join('') + '</div>' : ''}`;
     }).join('');
   }
+  if (o.inv && !o.area) h += reportInventory(o);
+  const appl = S.appliances.filter(x => !o.area || x.areaId === o.area);
+  if (appl.length) h += '<h2>Appliances & systems</h2><table>' + appl.slice().sort((a, b) => String(a.name).localeCompare(String(b.name))).map(x => `<tr><td><b>${esc(x.name)}</b></td><td>${esc([x.brand, x.model && 'Model ' + x.model, x.serial && 'Serial ' + x.serial].filter(Boolean).join(' · '))}</td><td class="nw">${x.purchaseDate ? 'bought ' + fmt(x.purchaseDate) : ''}</td><td class="nw">${x.warrantyEnd ? 'warranty ' + fmt(x.warrantyEnd) : ''}</td></tr>`).join('') + '</table>';
   return h + '</div>';
 }
 async function printReport() {
@@ -375,7 +378,7 @@ function searchExtra(q) {
   let h = '';
   if (facts.length) h += '<h2>Home info</h2>' + facts.map(factRow).join('');
   if (projs.length) h += '<h2>Projects</h2>' + projs.map(p => `<div class="row" data-proj="${p.id}"><div class="thumb">🏗️</div><div class="grow"><div class="t">${esc(p.title)}</div><div class="s">${esc(PSTATUS[p.status || 'planned'])}</div></div></div>`).join('');
-  return h;
+  return h + searchExtra2(q);
 }
 
 // ---------- Events for these screens ----------
