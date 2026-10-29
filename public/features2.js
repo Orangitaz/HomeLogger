@@ -200,7 +200,8 @@ function belongingView(b) {
     el.querySelectorAll('[data-doc]').forEach(z => z.onclick = ev => { ev.stopPropagation(); el.close(); docView(S.documents.find(d => d.id === z.dataset.doc)); });
   });
 }
-const csvCell = v => { v = String(v == null ? '' : v); return /[",\r\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; };
+const csvCell = v => { v = String(v == null ? '' : v); if (/^[=+@\t\r]|^-(?![0-9.]+$)/.test(v)) v = "'" + v; // stop spreadsheet apps treating text as a formula
+  return /[",\r\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; };
 function belongingsCsv() {
   const rows = [['Room', 'Item', 'Quantity', 'Value each', 'Total value', 'Bought', 'Model / serial', 'Notes']];
   for (const b of S.belongings.slice().sort((a, c) => (a.room || '').localeCompare(c.room || '') || String(a.name).localeCompare(String(c.name))))

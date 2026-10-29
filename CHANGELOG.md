@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.4.1
+- Belongings CSV export: text that starts with =, + or @ is saved as plain text so a spreadsheet never runs it as a formula.
+
 ## 1.4.0
 - Appliances: a register of your appliances and systems with brand, model, serial number, purchase date, warranty end, price, where you bought it, and photos (nameplate, manual, receipt). In the Android app, "Read model & serial from the photo" fills them in from a nameplate photo on the phone itself (nothing is uploaded).
 - Warranties: one screen listing what is covered, what ends within 90 days, and what has expired, including any documents you gave an expiry date. Warranties ending within 45 days show on the Home screen, and the server's daily webhook alert includes them.
