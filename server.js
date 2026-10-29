@@ -16,7 +16,7 @@ const BACKUPS = path.join(DATA, 'backups');
 fs.mkdirSync(FILES, { recursive: true });
 fs.mkdirSync(BACKUPS, { recursive: true });
 
-const EMPTY = { areas: [], tasks: [], records: [], documents: [], facts: [], projects: [], deleted: [], settings: { webhook: '' } };
+const EMPTY = { areas: [], tasks: [], records: [], documents: [], facts: [], projects: [], appliances: [], belongings: [], checks: [], deleted: [], settings: { webhook: '' } };
 const fresh = () => JSON.parse(JSON.stringify(EMPTY));
 let db = fresh();
 try { db = Object.assign(fresh(), JSON.parse(fs.readFileSync(DB_FILE, 'utf8'))); } catch { db = fresh(); }
@@ -40,7 +40,7 @@ const now = () => new Date().toISOString();
 let lastS = 0;
 const tick = () => (lastS = Math.max(Date.now(), lastS + 1));
 const ts = x => x.updatedAt || x.createdAt || '';
-const COLS = ['areas', 'tasks', 'records', 'documents', 'facts', 'projects'];
+const COLS = ['areas', 'tasks', 'records', 'documents', 'facts', 'projects', 'appliances', 'belongings', 'checks'];
 const HEX = /^[a-f0-9]{1,64}$/;
 function stamp(item) { item._s = tick(); return item; }
 function bury(col, item, at) {
@@ -72,11 +72,17 @@ const COLLECTIONS = {
   areas: ['name', 'icon', 'color', 'notes', 'coverId', 'details', 'order'],
   tasks: ['areaId', 'title', 'intervalMonths', 'nextDue', 'lastDone', 'notes'],
   records: ['areaId', 'projectId', 'type', 'date', 'title', 'vendor', 'notes', 'parts', 'cost'],
-  documents: ['areaId', 'recordId', 'projectId', 'factId', 'category', 'title', 'notes', 'expires', 'fileId', 'fileName', 'mime', 'size'],
+  documents: ['areaId', 'recordId', 'projectId', 'factId', 'applianceId', 'belongingId', 'category', 'title', 'notes', 'expires', 'fileId', 'fileName', 'mime', 'size'],
   // Home info: shutoff locations, paint colors, sizes, contacts... (photos are documents with factId)
   facts: ['category', 'title', 'value', 'notes'],
   // Upgrade projects with status, checklist and budget (before/after photos are documents with projectId)
   projects: ['areaId', 'title', 'status', 'notes', 'startDate', 'endDate', 'budget', 'checklist'],
+  // Appliance & system register (nameplate photos and manuals are documents with applianceId)
+  appliances: ['areaId', 'name', 'brand', 'model', 'serial', 'purchaseDate', 'warrantyEnd', 'price', 'store', 'notes'],
+  // Belongings inventory for insurance (photos are documents with belongingId)
+  belongings: ['room', 'name', 'qty', 'value', 'purchaseDate', 'serial', 'notes'],
+  // Seasonal checklist ticks: key = "<year>-<season>:<job>"
+  checks: ['key', 'done'],
 };
 
 function pick(body, keys) {
@@ -125,8 +131,9 @@ function dropOrphans() {
   keep('tasks', t => t.areaId && !areaIds.has(t.areaId));
   keep('records', r => r.areaId && !areaIds.has(r.areaId));
   keep('projects', p => p.areaId && !areaIds.has(p.areaId));
-  const rec = ids('records'), pro = ids('projects'), fac = ids('facts');
-  keep('documents', d => (d.areaId && !areaIds.has(d.areaId)) || (d.recordId && !rec.has(d.recordId)) || (d.projectId && !pro.has(d.projectId)) || (d.factId && !fac.has(d.factId)));
+  for (const x of db.appliances) if (x.areaId && !areaIds.has(x.areaId)) { x.areaId = ''; x.updatedAt = now(); stamp(x); } // keep the appliance, just unlink
+  const rec = ids('records'), pro = ids('projects'), fac = ids('facts'), app = ids('appliances'), bel = ids('belongings');
+  keep('documents', d => (d.areaId && !areaIds.has(d.areaId)) || (d.recordId && !rec.has(d.recordId)) || (d.projectId && !pro.has(d.projectId)) || (d.factId && !fac.has(d.factId)) || (d.applianceId && !app.has(d.applianceId)) || (d.belongingId && !bel.has(d.belongingId)));
 }
 
 // Deleting something also deletes what hangs off it (and its files). Every removal leaves a tombstone for sync.
@@ -143,7 +150,10 @@ function cascade(col, item) {
     const projs = drop('projects', p => p.areaId === item.id);
     drop('documents', d => d.areaId === item.id || recs.has(d.recordId) || projs.has(d.projectId));
     if (item.coverId) removeFile(item.coverId);
-  } else if (col === 'records') drop('documents', d => d.recordId === item.id);
+    for (const x of db.appliances) if (x.areaId === item.id) { x.areaId = ''; x.updatedAt = now(); stamp(x); }
+  } else if (col === 'appliances') drop('documents', d => d.applianceId === item.id);
+  else if (col === 'belongings') drop('documents', d => d.belongingId === item.id);
+  else if (col === 'records') drop('documents', d => d.recordId === item.id);
   else if (col === 'facts') drop('documents', d => d.factId === item.id);
   else if (col === 'projects') {
     drop('documents', d => d.projectId === item.id);
@@ -226,6 +236,7 @@ async function alertCheck() {
   const items = [];
   for (const t of db.tasks) if (t.nextDue && t.nextDue <= soon) items.push('Due: ' + t.title + ' (' + t.nextDue + ')');
   for (const d of db.documents) if (d.expires && d.expires <= in30) items.push('Expiring: ' + d.title + ' (' + d.expires + ')');
+  for (const x of db.appliances) if (x.warrantyEnd && x.warrantyEnd <= in30 && x.warrantyEnd >= soon) items.push('Warranty ends: ' + x.name + ' (' + x.warrantyEnd + ')');
   if (!items.length) return;
   lastAlert = today;
   try {
