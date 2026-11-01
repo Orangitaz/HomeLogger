@@ -115,6 +115,7 @@ function applianceForm(x, preset) {
       const fi = f('file');
       if (fi) { el.querySelector('#ok').disabled = true; for (const file of fi.files) await uploadDoc(file, { applianceId: rec.id, areaId: '', category: 'Photo', title: 'Nameplate' + (fi.files.length > 1 ? ' ' + file.name : '') }); }
       el.close(); await load(); render(); toast('Saved');
+      if (!x.id) { const fresh = S.appliances.find(z => z.id === rec.id); if (fresh && applTaskList(fresh)) setTimeout(() => applianceTasksSheet(fresh), 250); }
     };
   });
 }
@@ -125,11 +126,67 @@ function applianceView(x) {
   sheet(`<h3>🔌 ${esc(x.name)}</h3>
     <dl class="kv">${x.brand ? '<dt>Brand</dt><dd>' + esc(x.brand) + '</dd>' : ''}${x.model ? '<dt>Model</dt><dd>' + esc(x.model) + '</dd>' : ''}${x.serial ? '<dt>Serial</dt><dd>' + esc(x.serial) + '</dd>' : ''}${x.purchaseDate ? '<dt>Purchased</dt><dd>' + fmt(x.purchaseDate) + '</dd>' : ''}${w ? '<dt>Warranty</dt><dd>' + (w.n < 0 ? 'Expired ' : 'Until ') + fmt(x.warrantyEnd) + '</dd>' : ''}${num(x.price) ? '<dt>Price</dt><dd>' + money(num(x.price)) + '</dd>' : ''}${x.store ? '<dt>Bought from</dt><dd>' + esc(x.store) + '</dd>' : ''}${a ? '<dt>Area</dt><dd>' + esc(a.name) + '</dd>' : ''}${x.notes ? '<dt>Notes</dt><dd>' + esc(x.notes) + '</dd>' : ''}</dl>
     ${ph.length ? '<h2>Photos & files</h2><div class="phs">' + ph.map(d => img(d) ? `<img data-doc="${d.id}" src="${fileUrl(d.fileId)}">` : `<div class="thumb" data-doc="${d.id}">📄</div>`).join('') + '</div>' : ''}
-    <div class="actions"><button class="btn sec" id="addPh">📎 Add photo / manual</button><button class="btn" id="edit">Edit</button></div>`,
+    <div class="actions">${applTaskList(x) ? '<button class="btn sec" id="appTasks">🛠️ Maintenance tasks</button>' : ''}<button class="btn sec" id="addPh">📎 Add photo / manual</button><button class="btn" id="edit">Edit</button></div>`,
   el => {
+    const at = el.querySelector('#appTasks'); if (at) at.onclick = () => { el.close(); applianceTasksSheet(x); };
     el.querySelector('#edit').onclick = () => { el.close(); applianceForm(x); };
     el.querySelector('#addPh').onclick = () => { el.close(); attachFilesSheet({ title: 'Add to ' + x.name, meta: { applianceId: x.id, areaId: '' }, cats: ['Photo', 'Manual', 'Warranty', 'Receipt', 'Other'] }); };
     el.querySelectorAll('[data-doc]').forEach(z => z.onclick = ev => { ev.stopPropagation(); el.close(); docView(S.documents.find(d => d.id === z.dataset.doc)); });
+  });
+}
+
+
+// ---------- Appliance -> suggested maintenance tasks ----------
+const APPL_TASKS = [
+  [/refrigerator|fridge|freezer/i, '🧊', [['Clean refrigerator coils', '6'], ['Replace water filter', '6'], ['Check door seals and temperature', '12']]],
+  [/dishwasher/i, '🍽️', [['Clean dishwasher filter', '3'], ['Run a dishwasher cleaner cycle', '3'], ['Check door gasket and spray arms', '12']]],
+  [/range|oven|stove|cooktop/i, '🍳', [['Run self-clean / deep clean oven', '6'], ['Check oven door seal and burners', '12'], ['Clean range hood filter', '3']]],
+  [/microwave/i, '📻', [['Clean microwave and replace charcoal filter', '6']]],
+  [/washer|washing/i, '🧺', [['Clean washer drum and gasket', '3'], ['Inspect washer hoses', '12'], ['Replace washer hoses', '60']]],
+  [/dryer/i, '🌀', [['Clean dryer vent duct', '12'], ['Clean lint trap housing', '6']]],
+  [/water heater/i, '🚿', [['Flush the water heater tank', '12'], ['Test pressure-relief valve', '12'], ['Check the anode rod', '36']]],
+  [/furnace|boiler|heat pump|heater/i, '🔥', [['Replace furnace filter', '3'], ['Furnace tune-up', '12'], ['Test CO alarms near the furnace', '6']]],
+  [/air ?cond|\ba\/?c\b|mini.?split|condenser/i, '❄️', [['AC tune-up before summer', '12'], ['Clean outdoor condenser unit', '12'], ['Clean condensate drain line', '6'], ['Replace air filter', '3']]],
+  [/softener|water filter|reverse osmosis|\bro\b/i, '💧', [['Add salt / check the softener', '3'], ['Replace water filter cartridges', '6'], ['Sanitize the softener', '12']]],
+  [/garage door/i, '🚪', [['Lubricate garage door', '6'], ['Test door auto-reverse', '6'], ['Replace opener remote batteries', '12']]],
+  [/sump/i, '🪣', [['Test sump pump', '6'], ['Clean sump pit and pump intake', '12']]],
+  [/dehumidifier/i, '💨', [['Empty and clean dehumidifier', '3'], ['Clean dehumidifier filter', '3']]],
+  [/disposal/i, '♻️', [['Clean garbage disposal', '3']]],
+  [/smoke|co alarm|detector/i, '🚨', [['Test smoke and CO alarms', '6'], ['Replace alarm batteries', '12']]],
+  [/generator/i, '🔌', [['Run generator under load', '3'], ['Change generator oil', '12']]],
+];
+const applTaskList = x => { const n = [x.name, x.model].join(' '); const m = APPL_TASKS.find(r => r[0].test(n)); return m ? { icon: m[1], list: m[2] } : null; };
+function applianceTasksSheet(x) {
+  const m = applTaskList(x);
+  if (!m) return;
+  const have = new Set(S.tasks.map(t => String(t.title).trim().toLowerCase() + '|' + (t.areaId || '')));
+  const label = v => (INTERVALS.find(z => z[0] === v) || [v, 'Every ' + v + ' months'])[1];
+  const areaOpts = S.areas.map(a => `<option value="${a.id}"${a.id === x.areaId ? ' selected' : ''}>${esc(a.icon + ' ' + a.name)}</option>`).join('') + `<option value="__new"${!x.areaId ? ' selected' : ''}>＋ New area: ${esc(x.name)}</option>`;
+  sheet(`<h3>${m.icon} Maintenance for ${esc(x.name)}</h3><p class="small" style="margin-top:0">Tick the jobs you want. Each starts counting from today.</p>
+    <label>Add them to</label><select id="atArea">${areaOpts}</select>
+    <div id="atList" style="margin-top:8px"></div>
+    <div class="actions"><button class="btn sec" id="cancel">Not now</button><button class="btn" id="atAdd">Add selected</button></div>`,
+  el => {
+    const sel = el.querySelector('#atArea');
+    const draw = () => {
+      const aid = sel.value === '__new' ? '' : sel.value;
+      el.querySelector('#atList').innerHTML = m.list.map(([t, iv], i) => {
+        const dup = aid && have.has(t.toLowerCase() + '|' + aid);
+        return `<label class="pick"><input type="checkbox" data-i="${i}" ${dup ? 'disabled checked' : 'checked'}><span><b>${esc(t)}</b><span class="small"> · ${esc(label(iv))}${dup ? ' · already added' : ''}</span></span></label>`;
+      }).join('');
+    };
+    sel.onchange = draw; draw();
+    el.querySelector('#cancel').onclick = el.close;
+    el.querySelector('#atAdd').onclick = async () => {
+      const picks = [...el.querySelectorAll('#atList input:checked:not(:disabled)')].map(c => m.list[+c.dataset.i]);
+      if (!picks.length) return toast('Tick at least one job');
+      el.querySelector('#atAdd').disabled = true;
+      let aid = sel.value;
+      if (aid === '__new') { const a = await api('POST', '/api/areas', { name: x.name, icon: m.icon, color: '' }); aid = a.id; }
+      if (x.areaId !== aid) await api('PUT', '/api/appliances/' + x.id, { areaId: aid });
+      for (const [title, iv] of picks) await api('POST', '/api/tasks', { areaId: aid, title, intervalMonths: iv, nextDue: addMonths(today(), parseInt(iv, 10)), notes: 'For: ' + x.name + (x.model ? ' (' + x.model + ')' : '') });
+      el.close(); await load(); render(); toast(picks.length + (picks.length === 1 ? ' task added' : ' tasks added'));
+    };
   });
 }
 

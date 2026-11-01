@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.5.0
+- Appliances now suggest their usual maintenance. After adding a water heater, furnace, AC, dishwasher, fridge, washer, dryer, sump pump and similar, a sheet offers the common jobs (flush the tank, replace the filter, clean the coils…). Tick the ones you want, pick an area or create one named after the appliance, and they start counting from today. Also available any time from the appliance's 🛠️ Maintenance tasks button.
+- Server: `GET /api/status` gives a summary for Home Assistant or any dashboard (overdue and upcoming tasks, warranties ending, expiring documents). See the README for a ready-made Home Assistant sensor. Update the TrueNAS image to use it.
+
 ## 1.4.1
 - Belongings CSV export: text that starts with =, + or @ is saved as plain text so a spreadsheet never runs it as a formula.
 
