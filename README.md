@@ -10,13 +10,30 @@ Self-hosted home maintenance, upgrades and document storage. Runs on TrueNAS (cu
 - Home info page (shutoff locations with photos, paint colors, sizes, contacts), suggested starter tasks, upgrade projects with checklist/budget/photos, optional costs, printable history report
 - Appliance register (model, serial, warranty, nameplate photo; reads the nameplate on Android) with a warranties view, a seasonal "This season" checklist on the Home screen, and a room-by-room belongings inventory for insurance (CSV export, includable in the report)
 - Android app: read receipts from a photo (on the phone), print/save the report as PDF
-- Search across everything, backup/restore, 14 automatic daily backups, optional webhook alerts
+- Search across everything, backup/restore, 14 automatic daily backups, optional webhook alerts, a `/api/status` summary for Home Assistant
 
 ## Run
 ```
 docker run -d -p 3000:3000 -v /mnt/pool/homelogger:/data ghcr.io/orangitaz/homelogger:latest
 ```
 Environment: `PORT` (3000), `DATA_DIR` (/data), `HOMELOGGER_PASSWORD` (optional; browser login with any username).
+
+### Home Assistant / dashboards
+`GET /api/status` returns a small JSON summary: `overdue_tasks`, `due_soon_tasks` (next 14 days), `warranties_ending` and `documents_expiring` (next 45 days), `needs_attention` (the total), `next_task`, plus the lists behind each count. Set the container's `TZ` (for example `Pacific/Honolulu`) so "today" matches yours. If you set a password, send it with basic auth (any username).
+
+```yaml
+# configuration.yaml
+rest:
+  - resource: http://TRUENAS_IP:PORT/api/status
+    authentication: basic        # only if you set HOMELOGGER_PASSWORD
+    username: home
+    password: YOUR_PASSWORD
+    scan_interval: 1800
+    sensor:
+      - name: HomeLogger needs attention
+        value_template: "{{ value_json.needs_attention }}"
+        json_attributes: [overdue_tasks, due_soon_tasks, warranties_ending, documents_expiring, next_task, overdue, due_soon, warranties]
+```
 
 On TrueNAS, use a version tag (e.g. `1.0.0`) rather than `latest` so updates are picked up.
 

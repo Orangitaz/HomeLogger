@@ -225,6 +225,27 @@ function backupNow() {
 backupNow();
 setInterval(backupNow, 24 * 3600 * 1000).unref();
 
+// Summary for dashboards (Home Assistant etc.): GET /api/status. Dates use the server's local time zone (set TZ on the container).
+function statusSummary() {
+  const d0 = new Date(), pad = n => String(n).padStart(2, '0');
+  const today = d0.getFullYear() + '-' + pad(d0.getMonth() + 1) + '-' + pad(d0.getDate());
+  const plus = n => { const d = new Date(d0.getTime() + n * 864e5); return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()); };
+  const area = id => (db.areas.find(a => a.id === id) || {}).name || '';
+  const t = x => ({ title: x.title, area: area(x.areaId), due: x.nextDue });
+  const withDue = db.tasks.filter(x => x.nextDue).sort((a, b) => a.nextDue < b.nextDue ? -1 : 1);
+  const overdue = withDue.filter(x => x.nextDue < today), soon = withDue.filter(x => x.nextDue >= today && x.nextDue <= plus(14));
+  const warr = db.appliances.filter(x => x.warrantyEnd && x.warrantyEnd >= today && x.warrantyEnd <= plus(45)).sort((a, b) => a.warrantyEnd < b.warrantyEnd ? -1 : 1).map(x => ({ name: x.name, ends: x.warrantyEnd }));
+  const docs = db.documents.filter(x => x.expires && x.expires <= plus(45)).sort((a, b) => a.expires < b.expires ? -1 : 1).map(x => ({ title: x.title, expires: x.expires }));
+  const next = withDue.find(x => x.nextDue >= today);
+  return {
+    app: 'HomeLogger', version: VERSION, date: today,
+    overdue_tasks: overdue.length, due_soon_tasks: soon.length, warranties_ending: warr.length, documents_expiring: docs.length,
+    needs_attention: overdue.length + soon.length + warr.length + docs.length,
+    next_task: next ? t(next) : null,
+    overdue: overdue.slice(0, 20).map(t), due_soon: soon.slice(0, 20).map(t), warranties: warr.slice(0, 20), documents: docs.slice(0, 20),
+  };
+}
+
 // Daily webhook alert for due/overdue tasks and expiring documents.
 let lastAlert = '';
 async function alertCheck() {
@@ -284,6 +305,8 @@ const server = http.createServer(async (req, res) => {
       save();
       return send(res, 200, db.settings);
     }
+
+    if (a === 'status' && req.method === 'GET') return send(res, 200, statusSummary());
 
     if (a === 'backup' && req.method === 'GET') {
       return send(res, 200, JSON.stringify(db, null, 2), { 'Content-Disposition': 'attachment; filename="homelogger-backup-' + new Date().toISOString().slice(0, 10) + '.json"' });
