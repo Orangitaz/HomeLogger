@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.5.1
+- Restoring a damaged or partial backup can no longer corrupt the data: the server and the app now check every section first (the app also checks the files before replacing anything).
+- If the server's db.json can't be read at startup, a copy is kept as db.json.unreadable-… instead of being overwritten by an empty database.
+- The server answers invalid JSON with a clear 400 error, and the daily alert uses the server's local date (set TZ), like /api/status.
+- Very long model numbers, serials and titles no longer push appliance, warranty and report screens wider than the phone.
+- Adding an appliance whose name matches an existing area (for example "Water heater") suggests that area instead of creating a duplicate.
+
 ## 1.5.0
 - Appliances now suggest their usual maintenance. After adding a water heater, furnace, AC, dishwasher, fridge, washer, dryer, sump pump and similar, a sheet offers the common jobs (flush the tank, replace the filter, clean the coils…). Tick the ones you want, pick an area or create one named after the appliance, and they start counting from today. Also available any time from the appliance's 🛠️ Maintenance tasks button.
 - Server: `GET /api/status` gives a summary for Home Assistant or any dashboard (overdue and upcoming tasks, warranties ending, expiring documents). See the README for a ready-made Home Assistant sensor. Update the TrueNAS image to use it.

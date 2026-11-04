@@ -18,8 +18,19 @@ fs.mkdirSync(BACKUPS, { recursive: true });
 
 const EMPTY = { areas: [], tasks: [], records: [], documents: [], facts: [], projects: [], appliances: [], belongings: [], checks: [], deleted: [], settings: { webhook: '' } };
 const fresh = () => JSON.parse(JSON.stringify(EMPTY));
+// Make any loaded/restored data safe to use: every collection is an array of objects that have an id.
+function normalizeDb(d) {
+  const out = Object.assign(fresh(), d);
+  for (const c of [...COLS_ALL, 'deleted']) out[c] = Array.isArray(out[c]) ? out[c].filter(x => x && typeof x === 'object' && typeof x.id === 'string' || (c === 'deleted' && x && typeof x === 'object')) : [];
+  if (!out.settings || typeof out.settings !== 'object' || Array.isArray(out.settings)) out.settings = { webhook: '' };
+  return out;
+}
+const COLS_ALL = ['areas', 'tasks', 'records', 'documents', 'facts', 'projects', 'appliances', 'belongings', 'checks'];
 let db = fresh();
-try { db = Object.assign(fresh(), JSON.parse(fs.readFileSync(DB_FILE, 'utf8'))); } catch { db = fresh(); }
+try { db = normalizeDb(JSON.parse(fs.readFileSync(DB_FILE, 'utf8'))); } catch (e) {
+  db = fresh();
+  if (fs.existsSync(DB_FILE)) { try { fs.copyFileSync(DB_FILE, DB_FILE + '.unreadable-' + Date.now()); console.error('db.json could not be read (' + e.message + '); a copy was kept next to it.'); } catch {} }
+}
 
 let saveTimer = null;
 function save() {
@@ -250,10 +261,11 @@ function statusSummary() {
 let lastAlert = '';
 async function alertCheck() {
   const url = db.settings && db.settings.webhook;
-  const today = new Date().toISOString().slice(0, 10);
+  const ld = n => { const d = new Date(Date.now() + n * 864e5), p = v => String(v).padStart(2, '0'); return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate()); }; // server's local time zone (TZ)
+  const today = ld(0);
   if (!url || lastAlert === today) return;
-  const soon = addMonths(today, 0); // today
-  const in30 = new Date(Date.now() + 30 * 864e5).toISOString().slice(0, 10);
+  const soon = today;
+  const in30 = ld(30);
   const items = [];
   for (const t of db.tasks) if (t.nextDue && t.nextDue <= soon) items.push('Due: ' + t.title + ' (' + t.nextDue + ')');
   for (const d of db.documents) if (d.expires && d.expires <= in30) items.push('Expiring: ' + d.title + ' (' + d.expires + ')');
@@ -315,7 +327,7 @@ const server = http.createServer(async (req, res) => {
       const data = JSON.parse((await readBody(req, 100e6)).toString());
       if (!data || !Array.isArray(data.areas)) return send(res, 400, { error: 'Not a HomeLogger backup' });
       backupNow();
-      db = Object.assign(fresh(), data, { deleted: [] });
+      db = normalizeDb(Object.assign({}, data, { deleted: [] }));
       for (const c of COLS) for (const x of db[c]) stamp(x);
       save();
       return send(res, 200, { ok: true });
@@ -416,7 +428,7 @@ const server = http.createServer(async (req, res) => {
 
     send(res, 404, { error: 'not found' });
   } catch (e) {
-    send(res, 500, { error: String(e.message || e) });
+    send(res, e instanceof SyntaxError ? 400 : 500, { error: e instanceof SyntaxError ? 'Invalid JSON' : String(e.message || e) });
   }
 });
 

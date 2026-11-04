@@ -337,7 +337,7 @@ function renderReport() {
     <div class="two" style="margin:10px 0"><div><b>${areas.length}</b> ${areas.length === 1 ? 'area' : 'areas'}</div><div><b>${recs.length}</b> work entries</div>${o.costs && sp.all ? `<div><b>${money(sp.all)}</b> spent</div>` : ''}</div>`;
   if (!o.area) {
     const facts = S.facts.filter(f => f.category !== 'Codes & access').sort((a, b) => String(a.title).localeCompare(String(b.title)));
-    if (facts.length) h += '<h2>Home information</h2><table>' + facts.map(f => `<tr><td class="nw"><b>${esc(f.title)}</b></td><td>${esc([f.category, f.value, f.notes].filter(Boolean).join(' · '))}</td></tr>`).join('') + '</table>';
+    if (facts.length) h += '<h2>Home information</h2><table>' + facts.map(f => `<tr><td style="min-width:35%"><b>${esc(f.title)}</b></td><td>${esc([f.category, f.value, f.notes].filter(Boolean).join(' · '))}</td></tr>`).join('') + '</table>';
   }
   for (const a of areas) {
     const d = a.details || {}, filled = DETAIL_FIELDS.filter(([k]) => d[k]);

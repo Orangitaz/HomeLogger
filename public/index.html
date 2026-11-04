@@ -37,7 +37,8 @@ nav.bot button.upd::after{content:'';position:absolute;top:4px;left:calc(50% + 1
 .pill.ok{background:color-mix(in srgb,var(--acc) 20%,transparent);color:var(--acc)}
 h2{font-size:15px;color:var(--mut);text-transform:uppercase;letter-spacing:.06em;margin:22px 0 10px;font-weight:600}
 .row{display:flex;align-items:center;gap:10px;padding:12px 14px;background:var(--card);border:1px solid var(--line);border-radius:14px;margin-bottom:8px}
-.row .grow{flex:1;min-width:0}
+.row .grow{flex:1;min-width:0;overflow-wrap:anywhere}
+.pill{flex-shrink:0}
 .row .t{font-weight:600;overflow:hidden;text-overflow:ellipsis}
 .row .s{font-size:13px;color:var(--mut)}
 .tabs{display:flex;gap:6px;overflow-x:auto;margin:0 -16px 14px;padding:0 16px;scrollbar-width:none}
@@ -87,7 +88,8 @@ label.pick input{width:auto;padding:0;border:0;background:none;margin-top:3px;fl
 .rep h2{color:#111;text-transform:none;letter-spacing:0;font-size:18px;border-bottom:2px solid #222;padding-bottom:3px;margin:22px 0 8px}
 .rep h3{font-size:14px;margin:12px 0 4px}
 .rep table{width:100%;border-collapse:collapse;font-size:13px;margin-bottom:6px}
-.rep td,.rep th{border-bottom:1px solid #ddd;padding:5px 6px;text-align:left;vertical-align:top}
+.rep td,.rep th{border-bottom:1px solid #ddd;padding:5px 6px;text-align:left;vertical-align:top;overflow-wrap:anywhere}
+.rep td.nw{overflow-wrap:normal}
 .rep th{background:#f2f2f2;font-size:12px}
 .rep .nw{white-space:nowrap}.rep .r{text-align:right}.rep .small{color:#555}
 .rimgs{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}.rimgs img{height:90px;border-radius:6px;object-fit:cover}
@@ -394,15 +396,20 @@ async function localRestore(file) {
   const parsed = JSON.parse(await file.text());
   const db = parsed.db || parsed;
   if (!db || !Array.isArray(db.areas)) throw new Error('Not a HomeLogger backup');
-  for (const fid of await idb.keys('files')) await idb.del('files', fid);
-  Object.keys(blobUrls).forEach(k => delete blobUrls[k]);
-  LDB = Object.assign(EMPTY_DB(), db);
-  if (!Array.isArray(LDB.deleted)) LDB.deleted = [];
+  // Check everything first so a bad backup can't leave the phone half-restored.
+  const next = Object.assign(EMPTY_DB(), db);
+  for (const c of [...COLS, 'deleted']) next[c] = Array.isArray(next[c]) ? next[c].filter(x => x && typeof x === 'object') : [];
+  if (!next.settings || typeof next.settings !== 'object') next.settings = { webhook: '' };
+  const blobs = [];
   for (const [fid, f] of Object.entries(parsed.files || {})) {
     const bin = atob(f.b64), u = new Uint8Array(bin.length);
     for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i);
-    await idb.put('files', fid, new Blob([u], { type: f.mime || '' }));
+    blobs.push([fid, new Blob([u], { type: f.mime || '' })]);
   }
+  for (const fid of await idb.keys('files')) await idb.del('files', fid);
+  Object.keys(blobUrls).forEach(k => delete blobUrls[k]);
+  LDB = next;
+  for (const [fid, bl] of blobs) await idb.put('files', fid, bl);
   const c = syncCfg(); if (c) setSyncCfg(Object.assign(c, { since: 0, lastPush: '' }));
   await lsave();
 }

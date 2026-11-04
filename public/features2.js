@@ -161,7 +161,9 @@ function applianceTasksSheet(x) {
   if (!m) return;
   const have = new Set(S.tasks.map(t => String(t.title).trim().toLowerCase() + '|' + (t.areaId || '')));
   const label = v => (INTERVALS.find(z => z[0] === v) || [v, 'Every ' + v + ' months'])[1];
-  const areaOpts = S.areas.map(a => `<option value="${a.id}"${a.id === x.areaId ? ' selected' : ''}>${esc(a.icon + ' ' + a.name)}</option>`).join('') + `<option value="__new"${!x.areaId ? ' selected' : ''}>＋ New area: ${esc(x.name)}</option>`;
+  const same = x.areaId ? null : S.areas.find(a => String(a.name).trim().toLowerCase() === String(x.name).trim().toLowerCase()); // reuse an area that already has this name
+  const pre = x.areaId || (same && same.id) || '';
+  const areaOpts = S.areas.map(a => `<option value="${a.id}"${a.id === pre ? ' selected' : ''}>${esc(a.icon + ' ' + a.name)}</option>`).join('') + `<option value="__new"${!pre ? ' selected' : ''}>＋ New area: ${esc(x.name)}</option>`;
   sheet(`<h3>${m.icon} Maintenance for ${esc(x.name)}</h3><p class="small" style="margin-top:0">Tick the jobs you want. Each starts counting from today.</p>
     <label>Add them to</label><select id="atArea">${areaOpts}</select>
     <div id="atList" style="margin-top:8px"></div>
