@@ -26,9 +26,9 @@ import android.webkit.WebViewClient;
 import android.widget.Toast;
 
 import androidx.core.content.FileProvider;
-import com.google.android.gms.codescanner.barcode.GmsBarcodeScanner;
-import com.google.android.gms.codescanner.barcode.GmsBarcodeScannerOptions;
-import com.google.android.gms.codescanner.barcode.GmsBarcodeScanning;
+import com.google.mlkit.vision.codescanner.GmsBarcodeScanner;
+import com.google.mlkit.vision.codescanner.GmsBarcodeScannerOptions;
+import com.google.mlkit.vision.codescanner.GmsBarcodeScanning;
 import com.google.android.gms.tasks.OnCanceledListener;
 import com.google.android.gms.tasks.OnFailureListener;
 import com.google.android.gms.tasks.OnSuccessListener;
