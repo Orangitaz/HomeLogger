@@ -192,6 +192,32 @@ function applianceTasksSheet(x) {
   });
 }
 
+// ---------- Barcode scanning (Android app) ----------
+const BARCODE = () => LOCAL && typeof AndroidBridge.scanBarcode === 'function';
+const barcodeWaiters = {};
+window.__barcodeDone = (id, value, err) => { const w = barcodeWaiters[id]; if (w) { delete barcodeWaiters[id]; w({ value, err }); } };
+const scanBarcodeCode = () => new Promise(res => { const id = rid() + rid(); barcodeWaiters[id] = res; AndroidBridge.scanBarcode(id); });
+// Pick the product name / model out of an upcitemdb.com lookup answer.
+function parseUpc(j) {
+  const it = j && Array.isArray(j.items) ? j.items[0] : null;
+  if (!it) return null;
+  const clean = v => String(v == null ? '' : v).replace(/\s+/g, ' ').trim();
+  let title = clean(it.title), brand = clean(it.brand), model = clean(it.model);
+  if (title.length > 90) title = title.slice(0, 90).replace(/\s+\S*$/, '');
+  if (brand && title && !title.toLowerCase().includes(brand.toLowerCase())) title = brand + ' ' + title;
+  return title || brand || model ? { name: title || brand, model } : null;
+}
+async function lookupBarcode(code) {
+  if (!/^\d{8,14}$/.test(code)) return { status: 'text' };
+  try {
+    const r = await nativeFetch('https://api.upcitemdb.com/prod/trial/lookup?upc=' + code, { method: 'GET' });
+    if (r.status === 429) return { status: 'limit' };
+    if (!r.ok) return { status: 'error' };
+    const p = parseUpc(await r.json());
+    return p ? { status: 'ok', product: p } : { status: 'unknown' };
+  } catch (e) { return { status: 'error' }; }
+}
+
 // ---------- Belongings inventory ----------
 const ROOM_DEFAULTS = ['Living room', 'Kitchen', 'Dining room', 'Bedroom', 'Bathroom', 'Office', 'Garage', 'Basement', 'Attic', 'Outdoors'];
 const belQty = b => Math.max(1, parseInt(b.qty, 10) || 1);
@@ -220,7 +246,7 @@ function belongingForm(b, preset) {
   const rooms = [...new Set([...ROOM_DEFAULTS, ...roomsUsed()])];
   sheet(`<h3>${b.id ? 'Edit item' : 'Add item'}</h3>
     <label>Room</label><input name="room" value="${esc(b.room)}" placeholder="e.g. Living room"><div class="chips" id="rq">${rooms.map(r => `<span class="chip">${esc(r)}</span>`).join('')}</div>
-    <label>Item</label><input name="name" value="${esc(b.name)}" placeholder="e.g. 65-inch TV, Laptop, Wedding ring">
+    <label>Item</label><input name="name" value="${esc(b.name)}" placeholder="e.g. 65-inch TV, Laptop, Wedding ring">${BARCODE() ? '<button type="button" class="btn sec sm" id="scanBc" style="margin-top:6px">📷 Scan barcode</button><div class="small" id="bcNote">The barcode number is sent to upcitemdb.com to look up the product name.</div>' : ''}
     <div class="two"><div><label>How many</label><input name="qty" inputmode="numeric" value="${esc(b.qty || 1)}"></div><div><label>Value each (optional)</label><input name="value" inputmode="decimal" value="${b.value ? esc(b.value) : ''}" placeholder="0.00"></div></div>
     <label>Bought on (optional)</label><input type="date" name="purchaseDate" value="${esc(b.purchaseDate)}">
     <label>Model / serial (optional)</label><input name="serial" value="${esc(b.serial)}">
@@ -229,6 +255,27 @@ function belongingForm(b, preset) {
     <div class="actions">${b.id ? '<button class="btn bad" id="del">Delete</button>' : '<button class="btn sec" id="again">Save & add another</button>'}<button class="btn sec" id="cancel">Cancel</button><button class="btn" id="ok">Save</button></div>`,
   el => {
     el.querySelector('#rq').onclick = e => { if (e.target.classList.contains('chip')) el.querySelector('[name=room]').value = e.target.textContent; };
+    const sb = el.querySelector('#scanBc');
+    if (sb) sb.onclick = async () => {
+      const f = n => el.querySelector('[name=' + n + ']'), note = el.querySelector('#bcNote');
+      sb.disabled = true; const old = sb.textContent;
+      try {
+        const { value, err } = await scanBarcodeCode();
+        if (err === 'cancelled' || (!value && !err)) { note.textContent = ''; return; }
+        if (err) { note.textContent = 'Could not scan: ' + err; return; }
+        sb.textContent = 'Looking up…';
+        const tag = 'Barcode ' + value;
+        if (!f('notes').value.includes(tag)) f('notes').value = (f('notes').value ? f('notes').value + '\n' : '') + tag;
+        const r = await lookupBarcode(value);
+        if (r.status === 'ok') {
+          const got = [];
+          if (!f('name').value) { f('name').value = r.product.name; got.push('name'); }
+          if (r.product.model && !f('serial').value) { f('serial').value = r.product.model; got.push('model'); }
+          note.textContent = got.length ? 'Filled in: ' + got.join(', ') + '. Please check it.' : 'Found: ' + r.product.name + '. Your own entries were kept.';
+        } else note.textContent = { text: 'Saved the code in the notes.', unknown: 'Barcode ' + value + " isn't in the product list. Type the name in; the code is saved in the notes.", limit: 'Lookup limit reached for today. Type the name in; the code is saved in the notes.', error: "Couldn't look the product up (no internet?). Type the name in; the code is saved in the notes." }[r.status];
+      } catch (e) { note.textContent = 'Could not scan.'; }
+      finally { sb.disabled = false; sb.textContent = old; }
+    };
     el.querySelector('#cancel').onclick = el.close;
     if (b.id) el.querySelector('#del').onclick = async () => { if (!confirm('Delete this item and its photos?')) return; await api('DELETE', '/api/belongings/' + b.id); el.close(); await load(); render(); toast('Deleted'); };
     const save = again => async () => {

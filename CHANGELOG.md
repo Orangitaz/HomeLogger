@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.6.0
+- Barcode scanning for belongings (Android app): in Add item, tap 📷 Scan barcode. The scanner screen comes from Google Play services, so the app needs no camera permission. The product name and model are looked up and filled in (only into empty fields), and the barcode number is saved in the notes. If the lookup fails or the product isn't listed, you just type the name and the code is still kept.
+- Privacy: only the barcode number is sent, to upcitemdb.com (free lookups, about 100 a day). Nothing else leaves the phone.
+
 ## 1.5.1
 - Restoring a damaged or partial backup can no longer corrupt the data: the server and the app now check every section first (the app also checks the files before replacing anything).
 - If the server's db.json can't be read at startup, a copy is kept as db.json.unreadable-… instead of being overwritten by an empty database.

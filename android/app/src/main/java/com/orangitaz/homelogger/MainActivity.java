@@ -26,8 +26,13 @@ import android.webkit.WebViewClient;
 import android.widget.Toast;
 
 import androidx.core.content.FileProvider;
+import com.google.android.gms.codescanner.barcode.GmsBarcodeScanner;
+import com.google.android.gms.codescanner.barcode.GmsBarcodeScannerOptions;
+import com.google.android.gms.codescanner.barcode.GmsBarcodeScanning;
+import com.google.android.gms.tasks.OnCanceledListener;
 import com.google.android.gms.tasks.OnFailureListener;
 import com.google.android.gms.tasks.OnSuccessListener;
+import com.google.mlkit.vision.barcode.common.Barcode;
 import com.google.mlkit.vision.common.InputImage;
 import com.google.mlkit.vision.text.Text;
 import com.google.mlkit.vision.text.TextRecognition;
@@ -483,6 +488,54 @@ public class MainActivity extends Activity {
             } catch (Exception e) {
                 ocrDone(id, "", String.valueOf(e.getMessage()));
             }
+        }
+
+        // Barcode scanner: Google's scanner screen (from Play services) returns the code; the page looks the product up.
+        @JavascriptInterface
+        public void scanBarcode(final String id) {
+            runOnUiThread(new Runnable() {
+                @Override
+                public void run() {
+                    try {
+                        GmsBarcodeScannerOptions options = new GmsBarcodeScannerOptions.Builder()
+                                .setBarcodeFormats(Barcode.FORMAT_ALL_FORMATS)
+                                .build();
+                        GmsBarcodeScanner scanner = GmsBarcodeScanning.getClient(MainActivity.this, options);
+                        scanner.startScan()
+                                .addOnSuccessListener(new OnSuccessListener<Barcode>() {
+                                    @Override
+                                    public void onSuccess(Barcode barcode) {
+                                        String v = barcode.getRawValue();
+                                        barcodeDone(id, v == null ? "" : v, "");
+                                    }
+                                })
+                                .addOnCanceledListener(new OnCanceledListener() {
+                                    @Override
+                                    public void onCanceled() {
+                                        barcodeDone(id, "", "cancelled");
+                                    }
+                                })
+                                .addOnFailureListener(new OnFailureListener() {
+                                    @Override
+                                    public void onFailure(Exception e) {
+                                        barcodeDone(id, "", String.valueOf(e.getMessage()));
+                                    }
+                                });
+                    } catch (Exception e) {
+                        barcodeDone(id, "", String.valueOf(e.getMessage()));
+                    }
+                }
+            });
+        }
+
+        private void barcodeDone(String id, String value, String err) {
+            final String js = "window.__barcodeDone(" + JSONObject.quote(id) + "," + JSONObject.quote(value) + "," + JSONObject.quote(err) + ")";
+            runOnUiThread(new Runnable() {
+                @Override
+                public void run() {
+                    web.evaluateJavascript(js, null);
+                }
+            });
         }
 
         private void ocrDone(String id, String text, String err) {
